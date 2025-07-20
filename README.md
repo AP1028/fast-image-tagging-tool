@@ -30,7 +30,7 @@
 
 ##### 1. Request image: 
 
-0xFF 0x01 index1(4 byte) index2(4 byte)
+0xFF 0x01 index(4 byte)
 
 ##### 2. Request CSV tag info: 
 
@@ -44,17 +44,21 @@
 
 0xFF 0x04
 
+##### 5. Request data count 
+
+0xFF 0x05
+
 #### Server to client:
 
 ##### 1. Send image: 
 
-0xFF 0x01 OK(0x00, 1 byte) size(4 bytes) Image Data
+0xFF 0x01 OK(0x00, 1 byte) index(4 bytes) size(4 bytes) Image Data
 
 0xFF 0x01 ERROR(0x01, 1 byte) size(4 bytes) ERROR message
 
 ##### 2. Send CSV tag info: 
 
-0xFF 0x02 OK(0x00, 1 byte) tag_cnt(4 byte) size(4 bytes) data size(4 bytes) data ...
+0xFF 0x02 OK(0x00, 1 byte) tag_cnt(4 byte) data size(4 bytes) data ...
 
 0xFF 0x02 ERROR(0x01, 1 byte) size(4 bytes) ERROR message
 
@@ -69,6 +73,12 @@
 0xFF 0x04 OK(0x00, 1 byte)
 
 0xFF 0x04 ERROR(0x01, 1 byte) size(4 byte) ERROR message
+
+##### 5. Data count
+
+0xFF 0x05 OK(0x00, 1 byte) data_count(4 bytes)
+
+0xFF 0x05 ERROR(0x01, 1 byte) 
 
 
 
