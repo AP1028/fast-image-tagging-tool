@@ -217,7 +217,7 @@ class BackendServer:
                 
                 # request image
                 if cmd == 0x01: 
-                    data = self.recv_all(conn,8)
+                    data = self.recv_all(conn,4)
                     index= struct.unpack('>I', data)[0]
 
                     log_network(f'Received request for image {index}')
