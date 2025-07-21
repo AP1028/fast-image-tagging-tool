@@ -90,11 +90,19 @@ class BackendServer:
         
         # self.data_list[row][column]
 
+        log_info(f"Data CSV: \n{self.data_csv}")
+        log_info(f"Tag CSV: \n{self.data_csv}")
+        log_info(f"data_list: \n{self.data_list}")
+        log_info(f"data_column_list: \n{self.data_column_list}")
+        log_info(f"tag_data_list: \n{self.tag_data_list}")
+        log_info(f"tag_data_column_list: \n{self.tag_data_column_list}")
+
         # get tag code entry
         cnt = 0
         for entry in self.tag_data_column_list:
             if entry.strip() == 'code':
                 self.tag_entry_code = cnt
+                log_info(f"Tag CSV has column at {self.tag_entry_code} matching 'code'")
                 break
             cnt+=1
         
@@ -103,6 +111,7 @@ class BackendServer:
         for entry in self.tag_data_column_list:
             if entry.strip() == 'alias':
                 self.tag_entry_alias = cnt
+                log_info(f"Tag CSV has column at {self.tag_entry_alias} matching 'code'")
                 break
             cnt+=1
         
@@ -111,6 +120,7 @@ class BackendServer:
         for entry in self.data_column_list:
             if entry.strip() == 'file_path':
                 self.tag_entry_file_path = cnt
+                log_info(f"Data CSV has column at {self.tag_entry_file_path} matching 'file_path'")
                 break
             cnt+=1
 
@@ -123,15 +133,18 @@ class BackendServer:
         cnt = 0
         # search for column entry matching tag_code_ to get required tag code
         # and column entry number
+        log_info("Checking data_column_list for entry matching 'tag_code_*'")
         for entry in self.data_column_list:
             if entry.strip()[0:9] == 'tag_code_':
                 self.tag_code_list.append(int(entry.strip()[9:19]))
                 self.tag_column_entry.append(cnt)
+                log_info(f"Loaded tag code at column {cnt} with code {int(entry.strip()[9:19])}")
             else:
                 self.non_tag_data_column_list.append(entry)
             cnt+=1
         # search matching tag code in 'code' entry in tag csv list 
         # and record the alias
+        log_info("Checking tag code list for alias name")
         for tag_code in self.tag_code_list:
             alias = f"{tag_code}_fallback"
             for i in range(0,len(self.tag_data_list)):
@@ -139,6 +152,7 @@ class BackendServer:
                     alias = self.tag_data_list[i][self.tag_entry_alias]
                     break
             self.tag_column_alias.append(alias)
+            log_info(f"Found alias {alias}")
         # get total tag cnt
         self.tag_cnt = len(self.tag_column_entry)
         self.data_cnt = len(self.data_list)
