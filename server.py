@@ -17,11 +17,14 @@ default_setting = {
 def log_network(str):
     print(f'[SOCK] {str}')
 
+def log_ok(str):
+    print(f'[ OK ] {str}')
+
 def log_error(str):
     print(f'[FAIL] {str}')
 
 def log_info(str):
-    print(f'[FAIL] {str}')
+    print(f'[INFO] {str}')
 
 def log_warn(str):
     print(f'[WARN] {str}')
@@ -35,17 +38,17 @@ class BackendServer:
                 return
         # Error handing
         except FileNotFoundError:
-            print(f"[WARN] '{setting_path}' not found.")
-            print(f"Writing default setting to '{setting_path}'.")
+            log_warn(f"'{setting_path}' not found.")
+            log_info(f"Writing default setting to '{setting_path}'.")
             try:
                 with open(setting_path, 'w') as setting_file: # 'w' for write mode (overwrites existing file)
                     json.dump(default_setting, setting_file, indent=4)
-                print(f"Default setting written to {setting_path} successfully.")
+                log_ok(f"Default setting written to {setting_path} successfully.")
             except IOError as error:
-                print(f"An error occurred while writing to {setting_path}: {error}")
+                log_warn(f"An error occurred while writing to {setting_path}: {error}")
         except json.JSONDecodeError:
-            print(f"Error: Invalid JSON format in '{setting_path}'.")
-        print("Using default setting.")
+            log_warn(f"Invalid JSON format in '{setting_path}'.")
+        log_info("Using default setting.")
         self.configure_setting(default_setting)
         return
 
@@ -216,13 +219,13 @@ class BackendServer:
                     
                     self._update_tag(conn, index1, index2, csv_data_slice)
 
-                    conn.sendall(b'\x03\x00')  
+                    conn.sendall(b'\xff\x03\x00')  
 
                 elif cmd == 0x04:  # save
                     log_network('Received request saving')
                     self.save_csv()
                     # change complete
-                    conn.sendall(b'\x04\x00')  
+                    conn.sendall(b'\xff\x04\x00')  
 
                 # elif cmd == 0x05:  # request data count
                 #     self._send_data_count(conn)

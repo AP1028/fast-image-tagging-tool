@@ -8,6 +8,7 @@ import io
 import pandas as pd
 import os
 from io import StringIO
+import json
 
 default_setting = {
         "host": "127.0.0.1", # socket bind ip address
@@ -19,17 +20,20 @@ default_setting = {
 def log_network(str):
     print(f'[SOCK] {str}')
 
+def log_ok(str):
+    print(f'[ OK ] {str}')
+
 def log_error(str):
     print(f'[FAIL] {str}')
 
 def log_info(str):
-    print(f'[FAIL] {str}')
+    print(f'[INFO] {str}')
 
 def log_warn(str):
     print(f'[WARN] {str}')
 
 class FrontendClient:
-    def __init__(self,setting_path='server_setting.json'):
+    def __init__(self,setting_path='client_setting.json'):
         self.root = tk.Tk()
         self.root.title("AI Dataset Tagging Tool")
         self.root.geometry("1000x800")
@@ -50,6 +54,7 @@ class FrontendClient:
         self.create_widgets()
 
         # init first image
+        self.img_index = 0
         self.init_frame()
 
         # update ui
@@ -65,6 +70,51 @@ class FrontendClient:
         self.always_save = True
 
         self.img_index = 0
+    
+    def load_setting_file(self,setting_path):
+        try:
+            with open(setting_path, 'r') as setting_file:
+                setting_data = json.load(setting_file)
+                self.configure_setting(setting_data)
+                return
+         # Error handing
+        except FileNotFoundError:
+            log_warn(f"'{setting_path}' not found.")
+            log_info(f"Writing default setting to '{setting_path}'.")
+            try:
+                with open(setting_path, 'w') as setting_file: # 'w' for write mode (overwrites existing file)
+                    json.dump(default_setting, setting_file, indent=4)
+                log_ok(f"Default setting written to {setting_path} successfully.")
+            except IOError as error:
+                log_warn(f"An error occurred while writing to {setting_path}: {error}")
+        except json.JSONDecodeError:
+            log_warn(f"Error: Invalid JSON format in '{setting_path}'.")
+        log_info("Using default setting.")
+        self.configure_setting(default_setting)
+        return
+    
+    def configure_setting(self,setting_data):
+        try:
+            self.host = setting_data["host"]
+        except KeyError:
+            print("Missing host in setting, using 127.0.0.1 as default")
+            self.host = "127.0.0.1"
+        try:
+            self.port = setting_data["port"]
+        except KeyError:
+            print("Missing port in setting, using 52973 as default")
+            self.port = 52973
+        try:
+            self.multiple_selection = setting_data["multiple_selection"]
+        except KeyError:
+            print("Missing multiple_selection in setting, using false as default")
+            self.multiple_selection = False
+        try:
+            self.always_save = setting_data["always_save"]
+        except KeyError:
+            print("Missing multiple_selection in setting, using false as default")
+            self.always_save = False
+        
 
     def create_widgets(self):
         # button style
@@ -215,9 +265,7 @@ class FrontendClient:
 
     # update things on the screen
     def init_frame(self):
-        print(f"Requesting image {self.img_index}")
-        #  = index
-
+        log_info(f"Printing frame with index {self.img_index}")
         # image out of bound
         if self.img_index < 0 or self.img_index >= self.data_cnt:
             self.img_label.image = None
@@ -237,7 +285,7 @@ class FrontendClient:
         # image not in cache
         elif self.img_cache[self.img_index] == None:
             if self.img_error_msg[self.img_index] == None:
-                print(f"image {self.img_index} not found in cache, sending web request")
+                log_info(f"Image {self.img_index} not found in cache, sending web request")
                 self.request_image(self.img_index)
 
                 self.img_label.image = None
