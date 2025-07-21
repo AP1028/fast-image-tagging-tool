@@ -47,6 +47,7 @@ class FrontendClient:
         self.data_column_list = []
 
         self.data_cnt = None
+        self.tag_cnt = None
         self.img_cache = []
         self.img_error_msg = []
         self.labeling_status = []
