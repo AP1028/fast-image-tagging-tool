@@ -143,16 +143,6 @@ class BackendServer:
         self.tag_cnt = len(self.tag_column_entry)
         self.data_cnt = len(self.data_list)
 
-        # build partial CSV
-        partial_csv = self.data_csv.copy(deep=True)
-        for entry in self.non_tag_data_column_list:
-            partial_csv.drop(entry, inplace=True, axis=1)
-        partial_csv_str = partial_csv.to_csv(index=False)
-
-        # encode CSV ready to send
-        self.partial_csv_bytes = partial_csv_str.encode('utf-8')
-        self.partial_csv_bytes_length = len(self.partial_csv_bytes)
-
     def save_csv(self):
         df = pd.DataFrame(self.data_list, columns=self.data_column_list)
         if os.path.isdir(self.csv_save_dir)==False:
@@ -305,6 +295,16 @@ class BackendServer:
     #     conn.sendall(struct.pack('>I', self.data_cnt))
         
     def _send_partial_csv(self,conn):
+        # build partial CSV
+        partial_csv = self.data_csv.copy(deep=True)
+        for entry in self.non_tag_data_column_list:
+            partial_csv.drop(entry, inplace=True, axis=1)
+        partial_csv_str = partial_csv.to_csv(index=False)
+
+        # encode CSV ready to send
+        self.partial_csv_bytes = partial_csv_str.encode('utf-8')
+        self.partial_csv_bytes_length = len(self.partial_csv_bytes)
+
         conn.sendall(b'\xff\x06\x00')
         conn.sendall(struct.pack('>I', self.partial_csv_bytes_length))
         conn.sendall(self.partial_csv_bytes)

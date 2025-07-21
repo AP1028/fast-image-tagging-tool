@@ -1,5 +1,7 @@
 # Fast Image Tagging Tool
 
+A very fast image label tagging tool, based on socket and Tkinter.
+
 ## To Do List:
 
 ### Backend:
@@ -8,20 +10,30 @@
 - [x] CSV R/W on drive
 - [x] Socket CSV request
 - [x] Socket image request
+- [ ] Proper SIGINT handling
 - [ ] Socket receive setting override from frontend
-- [ ] Threading
+- [ ] More try-catch
+- [ ] Encryption
+- [ ] Threading (multi-client)
 
 ### Frontend:
-- [ ] JSON config file
+- [x] JSON config file
 - [x] Basic UI system
-- [ ] UI interation to overwite setting
 - [ ] Multi-selection support
 - [x] Basic socket implementation
-- [ ] CSV R/W through socket
+- [x] CSV R/W through socket
 - [x] Socket CSV request
 - [x] Real time saving of CSV
-- [ ] Automatic saving of CSV (with specified condition)
+- [ ] Configurable automatic saving of CSV (with specified condition)
 - [x] Socket image request
+- [ ] Proper SIGINT handling
+- [ ] Client reconnect
+- [ ] Image refresh (resend request)
+- [ ] Automatically pull all image cache
+- [ ] Mass labeling
+- [ ] Setting through UI - overwite setting JSON file
+- [ ] More try-catch
+- [ ] Encryption
 - [ ] Threadings
 
 ## Implementation
@@ -40,7 +52,7 @@
 
 ##### 3. CSV Change Request: 
 
-0xFF 0x03 index1(4 byte), index2(4 byte), tag_index_cnt(4 byte,) True/False(1 byte), True/False(1 byte)...
+0xFF 0x03 index1(4 byte), index2(4 byte), tag_index_cnt(4 byte), True/False(1 byte), True/False(1 byte)...
 
 ##### 4. Request Save: 
 
