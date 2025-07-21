@@ -79,6 +79,10 @@ class BackendServer:
             log_warn("Missing tag_path, using 'tag.csv' as default")
             self.tag_path = "tag.csv"
 
+    
+    
+
+
     def handle_csv(self):
         self.data_csv = pd.read_csv(self.csv_dir)
         self.tag_csv = pd.read_csv(self.tag_path)
@@ -184,10 +188,23 @@ class BackendServer:
                 )
                 client_thread.start()
 
+    def recv_all(self,conn,size):
+        conn.settimeout(30.0)
+        data = bytearray()
+        while len(data) < size:
+            try:
+                packet = conn.recv(size - len(data))
+                if not packet:
+                    raise ConnectionError("Socket connection broken")
+                data.extend(packet)
+            except socket.timeout:
+                raise TimeoutError(f"Timeout, expected length: {size}, received: {len(data)}")
+        return bytes(data)
+    
     def handle_client(self, conn, addr):
         try:
             while True:
-                init_char = conn.recv(1)
+                init_char = self.recv_all(conn,1)
                 if not init_char: break
                 else:
                     verifier = struct.unpack('B', init_char)[0]
@@ -196,11 +213,11 @@ class BackendServer:
                         continue
                 
                 log_network("Header matched, reading socket message")
-                cmd = struct.unpack('B', conn.recv(1))[0]
+                cmd = struct.unpack('B', self.recv_all(conn,1))[0]
                 
                 # request image
                 if cmd == 0x01: 
-                    data = conn.recv(8)
+                    data = self.recv_all(conn,8)
                     index= struct.unpack('>I', data)[0]
 
                     log_network(f'Received request for image {index}')
@@ -213,11 +230,11 @@ class BackendServer:
                     self._send_tag(conn)
                     
                 elif cmd == 0x03:  # request csv change
-                    data = conn.recv(12)
+                    data = self.recv_all(conn,12)
                     csv_data_slice = []
                     index1, index2, tag_index_cnt = struct.unpack('>III', data)
                     for i in range (0,tag_index_cnt):
-                        status = bool(conn.recv(1))
+                        status = bool(self.recv_all(conn,1))
                         csv_data_slice.append(status)
                     
                     log_network(f'Received request for CSV change, from index {index1} to {index2}')
@@ -249,25 +266,25 @@ class BackendServer:
 
     def _send_image(self, conn, index):
         # server will send image from index1 to index2
-        print(f"send image {index}")
         
         if index>= self.data_cnt or index<0:
             print("Error: you are requesting out of bound operation")
             return
         
         image_path = self.data_list[index][self.tag_entry_file_path]
-        print(f'Need to send image {index}, path is {image_path}')
+        log_info(f'Request received sending image {index} with path {image_path}')
         
         try:
             with open(image_path, 'rb') as f:
                 image_data = f.read()
             
-            print("sending image")
             image_size = len(image_data)
+            log_network(f"Sending image with size {image_size}")
             conn.sendall(b'\xFF\x01\x00')
             conn.sendall(struct.pack('>I', index))
             conn.sendall(struct.pack('>I', image_size))
             conn.sendall(image_data)
+            log_network(f"Sending complete")
         
         except IOError as error:
             print("image ioerror")

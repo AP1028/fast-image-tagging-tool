@@ -413,11 +413,24 @@ class FrontendClient:
     def request_csv_data(self):
         log_network(f'Request csv data')
         self.sock.sendall(b'\xff\x06')
-            
+    
+    def recv_all(self,size):
+        self.sock.settimeout(30.0)
+        data = bytearray()
+        while len(data) < size:
+            try:
+                packet = self.sock.recv(size - len(data))
+                if not packet:
+                    raise ConnectionError("Socket connection broken")
+                data.extend(packet)
+            except socket.timeout:
+                raise TimeoutError(f"Timeout, expected length: {size}, received: {len(data)}")
+        return bytes(data)
+
     def receive_data(self):
         log_network(f'Connection established, listening for data')
         while True:
-            init_char = self.sock.recv(1)
+            init_char = self.recv_all(1)
             if not init_char: break
             else:
                 verifier = struct.unpack('B', init_char)[0]
@@ -426,24 +439,24 @@ class FrontendClient:
                     continue
             
             log_network("Header matched, reading socket message")
-            cmd = struct.unpack('B', self.sock.recv(1))[0]
+            cmd = struct.unpack('B', self.recv_all(1))[0]
             
             # receive image
             if cmd == 0x01: 
-                data = self.sock.recv(5)
+                data = self.recv_all(5)
                 status, index = struct.unpack('>BI', data)
                 # read data through chunk
                 if status == 0x00:
                     # unset failed state
                     self.img_error_msg[index] = None
 
-                    data = self.sock.recv(4)
+                    data = self.recv_all(4)
                     img_size = struct.unpack('>I', data)[0]
                     received = 0
                     img_data = b''
                     while received < img_size:
                         # 4kb per chunk
-                        chunk = self.sock.recv(min(4096, img_size - received))
+                        chunk = self.recv_all(min(4096, img_size - received))
                         if not chunk:
                             raise ConnectionError("Connection closed early")
                         img_data += chunk
@@ -452,9 +465,9 @@ class FrontendClient:
                     log_network(f"Received image {index}")
                 else:
                     print("server respond with error with photo")
-                    data = self.sock.recv(4)
+                    data = self.recv_all(4)
                     error_size = struct.unpack('>I', data)[0]
-                    data = self.sock.recv(error_size)
+                    data = self.recv_all(error_size)
                     error_msg = data.decode('utf-8')
                     print(f"error is: {error_msg}")
                     self.img_error_msg[index] = error_msg
@@ -464,13 +477,13 @@ class FrontendClient:
             
             # receive csv tag
             elif cmd == 0x02:  
-                data = self.sock.recv(5)
+                data = self.recv_all(5)
                 status, self.tag_cnt = struct.unpack('>BI',data)
                 alias_list = []
                 for i in range(0,self.tag_cnt):
-                    data =  self.sock.recv(4)
+                    data =  self.recv_all(4)
                     alias_size = struct.unpack('>I', data)[0]
-                    alias_bytes =  self.sock.recv(alias_size)
+                    alias_bytes =  self.recv_all(alias_size)
                     alias = alias_bytes.decode('utf-8')
                     alias_list.append(alias)
                 log_network("Receive csv tag")
@@ -478,13 +491,13 @@ class FrontendClient:
             
             # CSV change completed
             elif cmd == 0x03:
-                data = self.sock.recv(1)
+                data = self.recv_all(1)
                 status = struct.unpack('>B',data)[0]
                 log_network(f"csv change complete with status {status}")
                 
             # save completed
             elif cmd == 0x04:  
-                data = self.sock.recv(1)
+                data = self.recv_all(1)
                 status = struct.unpack('>B',data)[0]
                 log_network(f"save complete with status {status}")
             
@@ -497,7 +510,7 @@ class FrontendClient:
             
             elif cmd == 0x06:  
                 log_network("receiving csv data")
-                data = self.sock.recv(5)
+                data = self.recv_all(5)
                 status, csv_size = struct.unpack('>BI', data)
                 # read data through chunk
                 if status == 0x00:
@@ -505,7 +518,7 @@ class FrontendClient:
                     csv_bytes = b''
                     while received < csv_size:
                         # 4kb per chunk
-                        chunk = self.sock.recv(min(4096, csv_size - received))
+                        chunk = self.recv_all(min(4096, csv_size - received))
                         if not chunk:
                             raise ConnectionError("Connection closed early")
                         csv_bytes += chunk
