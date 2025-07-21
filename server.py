@@ -204,7 +204,7 @@ class BackendServer:
     def handle_client(self, conn, addr):
         try:
             while True:
-                init_char = self.recv_all(conn,1)
+                init_char = conn.recv(1)
                 if not init_char: break
                 else:
                     verifier = struct.unpack('B', init_char)[0]

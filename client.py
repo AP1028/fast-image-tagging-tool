@@ -430,7 +430,7 @@ class FrontendClient:
     def receive_data(self):
         log_network(f'Connection established, listening for data')
         while True:
-            init_char = self.recv_all(1)
+            init_char = self.sock.recv(1)
             if not init_char: break
             else:
                 verifier = struct.unpack('B', init_char)[0]
