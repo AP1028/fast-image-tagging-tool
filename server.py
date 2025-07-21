@@ -3,10 +3,8 @@ import threading
 import json
 import os
 import struct
-import time
 import sys
 import pandas as pd
-from PIL import Image, ImageTk
 
 default_setting = {
         "host": "0.0.0.0", # socket bind ip address
@@ -15,6 +13,18 @@ default_setting = {
         "csv_save_dir": "data", # csv data save folder
         "tag_path": "tag.csv", # tag file location
     }
+
+def log_network(str):
+    print(f'[SOCK] {str}')
+
+def log_error(str):
+    print(f'[FAIL] {str}')
+
+def log_info(str):
+    print(f'[FAIL] {str}')
+
+def log_warn(str):
+    print(f'[WARN] {str}')
 
 class BackendServer:
     def load_setting_file(self,setting_path):
@@ -66,8 +76,6 @@ class BackendServer:
             print("Missing tag_path, using 'tag.csv' as default")
             self.tag_path = "tag.csv"
 
-    
-
     def handle_csv(self):
         self.data_csv = pd.read_csv(self.csv_dir)
         self.tag_csv = pd.read_csv(self.tag_path)
@@ -108,6 +116,7 @@ class BackendServer:
         self.tag_code_list=[]
         self.tag_column_entry=[]
         self.tag_column_alias=[]
+        self.non_tag_data_column_list=[]
         cnt = 0
         # search for column entry matching tag_code_ to get required tag code
         # and column entry number
@@ -115,6 +124,8 @@ class BackendServer:
             if entry.strip()[0:9] == 'tag_code_':
                 self.tag_code_list.append(int(entry.strip()[9:19]))
                 self.tag_column_entry.append(cnt)
+            else:
+                self.non_tag_data_column_list.append(entry)
             cnt+=1
         # search matching tag code in 'code' entry in tag csv list 
         # and record the alias
@@ -128,7 +139,17 @@ class BackendServer:
         # get total tag cnt
         self.tag_cnt = len(self.tag_column_entry)
         self.data_cnt = len(self.data_list)
-    
+
+        # build partial CSV
+        partial_csv = self.data_csv.copy(deep=True)
+        for entry in self.non_tag_data_column_list:
+            partial_csv.drop(entry, inplace=True, axis=1)
+        partial_csv_str = partial_csv.to_csv(index=False)
+
+        # encode CSV ready to send
+        self.partial_csv_bytes = partial_csv_str.encode('utf-8')
+        self.partial_csv_bytes_length = len(self.partial_csv_bytes)
+
     def save_csv(self):
         df = pd.DataFrame(self.data_list, columns=self.data_column_list)
         if os.path.isdir(self.csv_save_dir)==False:
@@ -137,12 +158,8 @@ class BackendServer:
         df.to_csv(f"{self.csv_save_dir}/save.csv", index=False)
         print(f"File saved to: {self.csv_save_dir}/save.csv")
     
-    
-    
     def start(self):
-        
         self.handle_csv()
-
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             s.bind((self.host, self.port))
@@ -170,32 +187,49 @@ class BackendServer:
                         print(f"Bad byte of {verifier}, dropping byte")
                         continue
                 
-                print("Reading socket message")
+                log_network("Header matched, reading socket message")
                 cmd = struct.unpack('B', conn.recv(1))[0]
                 
                 # request image
                 if cmd == 0x01: 
                     data = conn.recv(8)
                     index= struct.unpack('>I', data)[0]
+
+                    log_network(f'Received request for image {index}')
+
                     self._send_image(conn, index)
                 
                 # request csv tag
                 elif cmd == 0x02:  
+                    log_network(f'Received request for CSV tag name')
                     self._send_tag(conn)
                     
                 elif cmd == 0x03:  # request csv change
-                    data = conn.recv(13)
-                    index1, index2, tag_index, status = struct.unpack('>IIIB', data)
-                    self._update_tag(conn, index1, index2, tag_index, status)
+                    data = conn.recv(12)
+                    csv_data_slice = []
+                    index1, index2, tag_index_cnt = struct.unpack('>III', data)
+                    for i in range (0,tag_index_cnt):
+                        status = bool(conn.recv(1))
+                        csv_data_slice.append(status)
                     
+                    log_network(f'Received request for CSV change, from index {index1} to {index2}')
+                    
+                    self._update_tag(conn, index1, index2, csv_data_slice)
+
+                    conn.sendall(b'\x03\x00')  
 
                 elif cmd == 0x04:  # save
+                    log_network('Received request saving')
                     self.save_csv()
                     # change complete
                     conn.sendall(b'\x04\x00')  
 
-                elif cmd == 0x05:  # request data count
-                    self._send_data_count(conn)
+                # elif cmd == 0x05:  # request data count
+                #     self._send_data_count(conn)
+
+                elif cmd == 0x06:  # request partial csv data
+                    log_network('Received request for partial CSV data')
+                    self._send_partial_csv(conn)
 
                 else:
                     print(f"Unknown cmd byte {cmd}. Maybe check version?")
@@ -211,7 +245,7 @@ class BackendServer:
         
         if index>= self.data_cnt or index<0:
             print("Error: you are requesting out of bound operation")
-            sys.exit(1)
+            return
         
         image_path = self.data_list[index][self.tag_entry_file_path]
         print(f'Need to send image {index}, path is {image_path}')
@@ -249,25 +283,28 @@ class BackendServer:
             conn.sendall(struct.pack('>I', alias_size))
             conn.sendall(alias_bytes)  
 
-    def _update_tag(self, conn, index1, index2, tag_index, status):
+    def _update_tag(self, conn, index1, index2, csv_data_slice):
         # update tag in csv database, from index1 to index2
-        print(f"update tag {index1}, {index2}, {tag_index}, {status}")
+        print(f"update tag {index1}, {index2}, {csv_data_slice}")
 
-        if index2 >= self.data_cnt or tag_index<0 or tag_index>=self.tag_cnt:
-            print("Error: you are requesting out of bound operation")
-            sys.exit(1)
+        if index2 >= self.data_cnt or len(csv_data_slice)!=self.tag_cnt:
+            print("Error: you are requesting mismatch / out of bound operation")
+            return
 
         for i in range(index1, index2+1):
-            self.data_list[i][self.tag_column_entry[tag_index]] = bool(status)
-            print(f'writing {i} {self.tag_column_entry[tag_index]} to {bool(status)}')
-        
-        conn.sendall(b'\x03\x00')  
+            for j in range (0,self.tag_cnt):
+                self.data_list[i][self.tag_column_entry[j]] = csv_data_slice[j]
+                print(f'writing row {i} column {self.tag_column_entry[j]} to {csv_data_slice[j]}')
     
-    def _send_data_count(self,conn):
-        conn.sendall(b'\xff\x05\x00')
-        conn.sendall(struct.pack('>I', self.data_cnt))
+    
+    # def _send_data_count(self,conn):
+    #     conn.sendall(b'\xff\x05\x00')
+    #     conn.sendall(struct.pack('>I', self.data_cnt))
         
-
+    def _send_partial_csv(self,conn):
+        conn.sendall(b'\xff\x06\x00')
+        conn.sendall(struct.pack('>I', self.partial_csv_bytes_length))
+        conn.sendall(self.partial_csv_bytes)
 
     def __init__(self, setting_path='server_setting.json'):
         self.load_setting_file(setting_path)

@@ -7,9 +7,29 @@ import struct
 import io
 import pandas as pd
 import os
+from io import StringIO
+
+default_setting = {
+        "host": "127.0.0.1", # socket bind ip address
+        "port": 52973, # socket bind port
+        "multiple_selection": False,
+        "always_save": True
+    }
+
+def log_network(str):
+    print(f'[SOCK] {str}')
+
+def log_error(str):
+    print(f'[FAIL] {str}')
+
+def log_info(str):
+    print(f'[FAIL] {str}')
+
+def log_warn(str):
+    print(f'[WARN] {str}')
 
 class FrontendClient:
-    def __init__(self):
+    def __init__(self,setting_path='server_setting.json'):
         self.root = tk.Tk()
         self.root.title("AI Dataset Tagging Tool")
         self.root.geometry("1000x800")
@@ -18,33 +38,70 @@ class FrontendClient:
         self.sock = None
 
         # initialization (this is temporarily)
-        self.load_setting_file()
+        self.load_setting_file(setting_path)
         self.connect_to_server(self.host,self.port)
 
         # request necessary data
-        self.request_data_cnt()
+        # self.request_data_cnt()
         self.request_csv_tag_info()
+        self.request_csv_data()
         
         # start UI
         self.create_widgets()
 
         # init first image
-        self.get_image(self.img_index)
+        self.init_frame()
+
+        # update ui
+        self.update_ui()
 
         # enter tkinter loop
         self.start_client()
 
-    def load_setting_file(self):
+    def load_setting_file(self, setting_path):
         self.host = '127.0.0.1'
         self.port = 52973
+        self.multiple_selection = False
+        self.always_save = True
 
         self.img_index = 0
-        self.multiple_selection = False
 
     def create_widgets(self):
+        # button style
+        self.style = ttk.Style()
+        self.style.configure('White.TButton', 
+                         background='#f0f0f0', 
+                         foreground='black',
+                         font=('Arial', 10),
+                         padding=5)
+    
+        self.style.configure('Blue.TButton', 
+                            background='#f0f0f0',  # 蓝色
+                            foreground='#4a86e8',
+                            font=('Arial', 10, 'bold'),
+                            padding=5)
+        
+        self.style.configure('Red.TButton', 
+                            background='#f0f0f0',  # 红色
+                            foreground='#e74c3c',
+                            font=('Arial', 10, 'bold'),
+                            padding=5)
+
         # main frame
         self.main_frame = ttk.Frame(self.root, padding=10)
         self.main_frame.pack(fill=tk.BOTH, expand=True)
+
+        self.status_bar = ttk.Frame(self.main_frame, height=25, relief=tk.SUNKEN)
+        self.status_bar.pack(fill=tk.X, pady=(0, 5))
+
+        # 状态标签
+        self.status_label = ttk.Label(
+            self.status_bar, 
+            text="0/0",
+            anchor=tk.W
+        )
+        self.status_label.pack(side=tk.LEFT, padx=5)
+
         
         # image display (80% space)
         self.img_frame = ttk.Frame(self.main_frame)
@@ -74,7 +131,6 @@ class FrontendClient:
         self.labeling_frame = ttk.Frame(self.root, padding=10)
         self.labeling_frame.pack(fill=tk.X)
 
-
         self.labeling_button_list = []
         # single choice
         for i in range (0,self.tag_cnt):
@@ -89,16 +145,14 @@ class FrontendClient:
         # multiple choice
         # ...
         # false button
-        false_button = ttk.Button(
+        self.false_button = ttk.Button(
             self.labeling_frame, 
             text='FALSE', 
             command=lambda idx=-1: self.handle_selection(idx)
             )
-        false_button.pack(side=tk.LEFT, padx=5)
+        self.false_button.pack(side=tk.LEFT, padx=5)
         self.root.bind('F', self.keyboard_event)
         self.root.bind('f', self.keyboard_event)
-
-        
     
     def connect_to_server(self,host,port):
         try:
@@ -127,38 +181,50 @@ class FrontendClient:
                     self.next_image()
     
     def handle_selection(self,tag_index):
+        
+        # write to own csv
+        # local data_list write
         print(f'selecting tag {tag_index}')
         if tag_index == -1:
             for i in range(0,self.tag_cnt):
-                self.request_csv_change(self.img_index, self.img_index, i, False)
+                self.data_list[self.img_index][i] = False
         elif self.multiple_selection==False:
-            self.request_csv_change(self.img_index, self.img_index, tag_index, True)
+            self.data_list[self.img_index][tag_index] = True
             for i in range(0,self.tag_cnt):
                 if i!=tag_index:
-                    self.request_csv_change(self.img_index, self.img_index, i, False)
+                    self.data_list[self.img_index][i] = False
         else:
             # TO DO: multiple selection
             pass
 
+        self.request_csv_change(self.img_index,self.img_index,self.data_list[self.img_index])
+        self.update_ui()
 
     def prev_image(self):
         if self.img_index > 0:
-            self.get_image(self.img_index-1)
+            self.goto_frame(self.img_index-1)
 
     def next_image(self):
         if self.img_index < self.data_cnt - 1:
-            self.get_image(self.img_index + 1)
-
-    def get_image(self,index):
-        print(f"Requesting image {index}")
+            self.goto_frame(self.img_index+1)
+    
+    def goto_frame(self,index):
         self.img_index = index
+        self.init_frame()
+        self.update_ui()
 
-        if index < 0 or index >= self.data_cnt:
+    # update things on the screen
+    def init_frame(self):
+        print(f"Requesting image {self.img_index}")
+        #  = index
+
+        # image out of bound
+        if self.img_index < 0 or self.img_index >= self.data_cnt:
             self.img_label.image = None
             self.img_label.config(image='')
 
             self.img_label.config(
-            text=f"Image {index} out of bound!",  # 错误信息
+            text=f"Image {self.img_index} out of bound!",  # 错误信息
             foreground="white",  # 文字颜色
             background="gray",  # 背景颜色
             font=("Arial", 24),  # 字体大小
@@ -168,54 +234,72 @@ class FrontendClient:
             # 确保标签有足够大小显示文字
             self.img_label.config(width=800, height=600)
 
-        elif self.img_cache[index] == None:
-            if self.img_error_msg[index] == None:
-                print(f"image {index} not found in cache, sending web request")
-                self.request_image(index)
+        # image not in cache
+        elif self.img_cache[self.img_index] == None:
+            if self.img_error_msg[self.img_index] == None:
+                print(f"image {self.img_index} not found in cache, sending web request")
+                self.request_image(self.img_index)
 
                 self.img_label.image = None
                 self.img_label.config(image='')
 
                 # show image not found
-                # fake_image = Image.new("RGB", (800, 600), "gray")
+                # fake_image = Image.new("RGB", (796, 448), "gray")
                 # fake_photo = ImageTk.PhotoImage(fake_image)
                 # self.img_label.config(image=fake_photo)
                 # self.img_label.image=fake_photo
 
                 self.img_label.config(
-                text=f"Image {index} not available",  # 错误信息
+                text=f"Image {self.img_index} loading",  # 错误信息
                 foreground="white",  # 文字颜色
                 background="gray",  # 背景颜色
-                font=("Arial", 24),  # 字体大小
+                font=("Arial", 12),  # 字体大小
                 anchor="center",  # 文字居中
                 justify="center"  # 多行文字居中
                 )
                 # 确保标签有足够大小显示文字
                 # self.img_label.config(width=800, height=600)
+
+            # image in cache
             else:
                 self.img_label.image = None
                 self.img_label.config(image='')
 
-                error_msg = self.img_error_msg[index]
+                error_msg = self.img_error_msg[self.img_index]
                 
                 self.img_label.config(
-                text=f"Remote respond the error: {error_msg}",  # 错误信息
+                text=f"Remote server responded with the following error:\n {error_msg}",  # 错误信息
                 foreground="white",  # 文字颜色
                 background="gray",  # 背景颜色
-                font=("Arial", 24),  # 字体大小
+                font=("Arial", 12),  # 字体大小
+                wraplength=600,
                 anchor="center",  # 文字居中
                 justify="center"  # 多行文字居中
                 )
         else:
             # process image with PIL
-            print(f"image {index} found in cache, printing...")
-            img_data = self.img_cache[index]
+            print(f"image {self.img_index} found in cache, printing...")
+            img_data = self.img_cache[self.img_index]
             image = Image.open(io.BytesIO(img_data))
-            image.thumbnail((800, 600))  # adjust size
+            image.thumbnail((796, 448))  # adjust size
             photo = ImageTk.PhotoImage(image)
                 
             self.img_label.config(image=photo)
             self.img_label.image=photo
+    
+    def update_ui(self):
+        # buttons
+        for i in range(0,self.tag_cnt):
+            if self.data_list[self.img_index][i]:
+                self.labeling_button_list[i].config(style='Blue.TButton')
+            else:
+                self.labeling_button_list[i].config(style='White.TButton')
+        if True in self.data_list[self.img_index]:
+            self.false_button.config(style='White.TButton')
+        else:
+            self.false_button.config(style='Blue.TButton')
+
+        self.status_label.config(text=f'{self.img_index+1}/{self.data_cnt}')
 
     def request_image_multiple(self, index1, index2):
         for i in range(index1, index2+1):
@@ -223,21 +307,38 @@ class FrontendClient:
                 self.request_image(i)
     
     def request_image(self, index):
+        log_network(f'Request image {index}')
         self.sock.sendall(b'\xff\x01')
         self.sock.sendall(struct.pack('>I', index))
     
     def request_csv_tag_info(self):
+        log_network(f'Request csv tag')
         self.sock.sendall(b'\xff\x02')
     
-    def request_csv_change(self,index1,index2,tag_index,status):
+    def request_csv_change(self,index1,index2,write_list):
+        log_network(f'Request csv change')
         self.sock.sendall(b'\xff\x03')
-        self.sock.sendall(struct.pack('>IIIB', index1,index2, tag_index, status))
+        self.sock.sendall(struct.pack('>III', index1,index2, self.tag_cnt))
+        for i in range(0,self.tag_cnt):
+            if write_list[i]:
+                self.sock.sendall(b'\x01')
+            else:
+                self.sock.sendall(b'\x00')
+        # autosave when writing
+        if(self.always_save):
+            self.request_save()
     
     def request_save(self):
+        log_network(f'Request save')
         self.sock.sendall(b'\xff\x04')
     
     def request_data_cnt(self):
+        log_network(f'Request data cnt')
         self.sock.sendall(b'\xff\x05')
+    
+    def request_csv_data(self):
+        log_network(f'Request csv data')
+        self.sock.sendall(b'\xff\x06')
             
     def receive_data(self):
         while True:
@@ -246,10 +347,10 @@ class FrontendClient:
             else:
                 verifier = struct.unpack('B', init_char)[0]
                 if verifier != 0xFF: 
-                    print(f"Bad byte of {verifier}, dropping byte")
+                    log_network(f"Bad byte of {verifier}, dropping byte")
                     continue
             
-            print("Reading socket message")
+            log_network("Header matched, reading socket message")
             cmd = struct.unpack('B', self.sock.recv(1))[0]
             
             # receive image
@@ -258,6 +359,9 @@ class FrontendClient:
                 status, index = struct.unpack('>BI', data)
                 # read data through chunk
                 if status == 0x00:
+                    # unset failed state
+                    self.img_error_msg[index] = None
+
                     data = self.sock.recv(4)
                     img_size = struct.unpack('>I', data)[0]
                     received = 0
@@ -270,6 +374,7 @@ class FrontendClient:
                         img_data += chunk
                         received += len(chunk)
                     self.handle_image(index,img_data)
+                    log_network(f"Received image {index}")
                 else:
                     print("server respond with error with photo")
                     data = self.sock.recv(4)
@@ -278,7 +383,9 @@ class FrontendClient:
                     error_msg = data.decode('utf-8')
                     print(f"error is: {error_msg}")
                     self.img_error_msg[index] = error_msg
-                    self.get_image(index)
+
+                    self.img_index = index
+                    self.init_frame()
 
             
             # receive csv tag
@@ -292,24 +399,49 @@ class FrontendClient:
                     alias_bytes =  self.sock.recv(alias_size)
                     alias = alias_bytes.decode('utf-8')
                     alias_list.append(alias)
+                log_network("Receive csv tag")
                 self.handle_csv_tag(alias_list)
             
             # CSV change completed
             elif cmd == 0x03:
-                pass
+                data = self.sock.recv(1)
+                status = struct.unpack('>B',data)[0]
+                log_network(f"csv change complete with status {status}")
                 
             # save completed
             elif cmd == 0x04:  
-                pass
+                data = self.sock.recv(1)
+                status = struct.unpack('>B',data)[0]
+                log_network(f"save complete with status {status}")
             
             # ask for data size
-            elif cmd == 0x05:  
+            # elif cmd == 0x05:  
+            #     log_network("receiving data size")
+            #     data = self.sock.recv(5)
+            #     status, data_cnt = struct.unpack('>BI',data)
+            #     self.handle_data_cnt(data_cnt)
+            
+            elif cmd == 0x06:  
+                log_network("receiving csv data")
                 data = self.sock.recv(5)
-                status, data_cnt = struct.unpack('>BI',data)
-                self.handle_data_cnt(data_cnt)
+                status, csv_size = struct.unpack('>BI', data)
+                # read data through chunk
+                if status == 0x00:
+                    received = 0
+                    csv_bytes = b''
+                    while received < csv_size:
+                        # 4kb per chunk
+                        chunk = self.sock.recv(min(4096, csv_size - received))
+                        if not chunk:
+                            raise ConnectionError("Connection closed early")
+                        csv_bytes += chunk
+                        received += len(chunk)
+                    self.handle_csv(csv_bytes)
+                else:
+                    pass
 
             else:
-                print(f"Unknown cmd byte {cmd}. Maybe check version?")
+                log_network(f"Unknown cmd byte {cmd}. Maybe check version?")
 
     def handle_image(self, index, img_data):
         if not img_data:
@@ -320,21 +452,37 @@ class FrontendClient:
         self.img_cache[index] = img_data
 
         if index == self.img_index:
-            self.get_image(index)
+            self.init_frame()
     
     def handle_csv_tag(self,alias_list):
         self.alias_list = alias_list
 
-    def handle_data_cnt(self,data_cnt):
-        self.data_cnt = data_cnt
+    # def handle_data_cnt(self,data_cnt):
+    #     self.data_cnt = data_cnt
+    #     self.img_cache = []
+    #     self.img_error_msg = []
+    #     self.labeling_status = []
+    #     for i in range(0,data_cnt):
+    #         self.img_cache.append(None)
+    #         self.img_error_msg.append(None)
+    #         self.labeling_status.append(False)
+    
+    def handle_csv(self,csv_bytes):
+        csv_str = csv_bytes.decode('utf-8')
+        csv_data = pd.read_csv(StringIO(csv_str))
+        self.data_list = csv_data.values.tolist()
+        self.data_column_list = csv_data.columns.tolist()
+
+        self.data_cnt = len(self.data_list)
         self.img_cache = []
         self.img_error_msg = []
         self.labeling_status = []
-        for i in range(0,data_cnt):
+        for i in range(0,self.data_cnt):
             self.img_cache.append(None)
             self.img_error_msg.append(None)
             self.labeling_status.append(False)
-
+        
+        print(f"csv list received:\n {self.data_list}")
 
     def start_client(self):
         self.root.mainloop()
