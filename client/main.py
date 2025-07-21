@@ -74,8 +74,9 @@ class FrontendClient:
         self.labeling_frame = ttk.Frame(self.root, padding=10)
         self.labeling_frame.pack(fill=tk.X)
 
-        self.labeling_button_list = []
 
+        self.labeling_button_list = []
+        # single choice
         for i in range (0,self.tag_cnt):
             button = ttk.Button(
                 self.labeling_frame, 
@@ -84,6 +85,18 @@ class FrontendClient:
                 )
             self.labeling_button_list.append(button)
             self.labeling_button_list[i].pack(side=tk.LEFT, padx=5)
+            self.root.bind(str(i+1), self.keyboard_event)
+        # multiple choice
+        # ...
+        # false button
+        false_button = ttk.Button(
+            self.labeling_frame, 
+            text='FALSE', 
+            command=lambda idx=-1: self.handle_selection(idx)
+            )
+        false_button.pack(side=tk.LEFT, padx=5)
+        self.root.bind('F', self.keyboard_event)
+        self.root.bind('f', self.keyboard_event)
 
         
     
@@ -103,15 +116,28 @@ class FrontendClient:
             self.next_image()
         elif event.keysym == 's' or event.keysym == 'S':
             self.request_save()
+        elif event.keysym == 'f' or event.keysym == 'F':
+            self.handle_selection(-1)
+            self.next_image()
+        else:
+            key_num = int(event.keysym)
+            if key_num>0 and key_num<=self.tag_cnt and key_num<=9:
+                self.handle_selection(key_num-1)
+                if self.multiple_selection == False:
+                    self.next_image()
     
     def handle_selection(self,tag_index):
         print(f'selecting tag {tag_index}')
-        if self.multiple_selection==False:
+        if tag_index == -1:
+            for i in range(0,self.tag_cnt):
+                self.request_csv_change(self.img_index, self.img_index, i, False)
+        elif self.multiple_selection==False:
             self.request_csv_change(self.img_index, self.img_index, tag_index, True)
             for i in range(0,self.tag_cnt):
                 if i!=tag_index:
                     self.request_csv_change(self.img_index, self.img_index, i, False)
         else:
+            # TO DO: multiple selection
             pass
 
 
@@ -312,10 +338,6 @@ class FrontendClient:
 
     def start_client(self):
         self.root.mainloop()
-
-
-
-   
 
 if __name__ == "__main__":
       # Main window
