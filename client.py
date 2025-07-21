@@ -210,11 +210,11 @@ class FrontendClient:
 
         self.labeling_button_list = []
         
-        time.sleep(10)
+        time.sleep(0.1)
         # Lock until at least self.tag_cnt is available
         while (self.tag_cnt == None):
-            log_info('No response in 50ms. Waiting for self.tag_cnt to be loaded.')
-            time.sleep(50)
+            log_info('No response in 0.1s. Waiting for self.tag_cnt to be loaded.')
+            time.sleep(0.1)
             self.request_csv_tag_info()
         
         log_ok(f'self.tag_cnt successfully loaded with value of {self.tag_cnt}')
@@ -507,8 +507,8 @@ class FrontendClient:
                     print(f"error is: {error_msg}")
                     self.img_error_msg[index] = error_msg
 
-                    self.img_index = index
-                    self.init_frame()
+                    if self.img_index == index:
+                        self.init_frame()
             
             # receive csv tag
             elif cmd == 0x02:  
