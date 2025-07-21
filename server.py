@@ -111,7 +111,7 @@ class BackendServer:
         for entry in self.tag_data_column_list:
             if entry.strip() == 'alias':
                 self.tag_entry_alias = cnt
-                log_info(f"Tag CSV has column at {self.tag_entry_alias} matching 'code'")
+                log_info(f"Tag CSV has column at {self.tag_entry_alias} matching 'alias'")
                 break
             cnt+=1
         
