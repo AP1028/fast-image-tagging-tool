@@ -56,27 +56,27 @@ class BackendServer:
         try:
             self.host = setting_data["host"]
         except KeyError:
-            print("Missing host in setting, using 0.0.0.0 as default")
+            log_warn("Missing host in setting, using 0.0.0.0 as default")
             self.host = "0.0.0.0"
         try:
             self.port = setting_data["port"]
         except KeyError:
-            print("Missing port in setting, using 52973 as default")
+            log_warn("Missing port in setting, using 52973 as default")
             self.port = 52973
         try:
             self.csv_dir = setting_data["csv_dir"]
         except KeyError:
-            print("Missing csv_dir, using 'data' as default")
+            log_warn("Missing csv_dir, using 'data' as default")
             self.csv_dir = "data"
         try:
             self.csv_save_dir = setting_data["csv_save_dir"]
         except KeyError:
-            print("Missing csv_save_dir, using 'data' as default")
+            log_warn("Missing csv_save_dir, using 'data' as default")
             self.csv_save_dir = "data"
         try:
             self.tag_path = setting_data["tag_path"]
         except KeyError:
-            print("Missing tag_path, using 'tag.csv' as default")
+            log_warn("Missing tag_path, using 'tag.csv' as default")
             self.tag_path = "tag.csv"
 
     def handle_csv(self):
@@ -90,11 +90,12 @@ class BackendServer:
         
         # self.data_list[row][column]
 
-        log_info(f"Data CSV: \n{self.data_csv}")
-        log_info(f"Tag CSV: \n{self.data_csv}")
-        log_info(f"data_list: \n{self.data_list}")
+        log_info(f"Data CSV loaded with size of {len(self.data_csv)}")
+        log_info(f"Tag CSV loaded with size of {len(self.data_csv)}")
+        log_info(f"data_list loaded with size of {len(self.data_list)}")
+        log_info(f"tag_data_list loaded with size of {len(self.tag_data_list)}")
+        
         log_info(f"data_column_list: \n{self.data_column_list}")
-        log_info(f"tag_data_list: \n{self.tag_data_list}")
         log_info(f"tag_data_column_list: \n{self.tag_data_column_list}")
 
         # get tag code entry

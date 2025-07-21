@@ -35,10 +35,6 @@ def log_warn(str):
 
 class FrontendClient:
     def __init__(self,setting_path='client_setting.json'):
-        self.root = tk.Tk()
-        self.root.title("AI Dataset Tagging Tool")
-        self.root.geometry("1000x800")
-
         # define socket
         self.sock = None
 
@@ -108,26 +104,33 @@ class FrontendClient:
         try:
             self.host = setting_data["host"]
         except KeyError:
-            print("Missing host in setting, using 127.0.0.1 as default")
+            log_warn("Missing host in setting, using 127.0.0.1 as default")
             self.host = "127.0.0.1"
         try:
             self.port = setting_data["port"]
         except KeyError:
-            print("Missing port in setting, using 52973 as default")
+            log_warn("Missing port in setting, using 52973 as default")
             self.port = 52973
         try:
             self.multiple_selection = setting_data["multiple_selection"]
         except KeyError:
-            print("Missing multiple_selection in setting, using false as default")
+            log_warn("Missing multiple_selection in setting, using false as default")
             self.multiple_selection = False
         try:
             self.always_save = setting_data["always_save"]
         except KeyError:
-            print("Missing multiple_selection in setting, using false as default")
+            log_warn("Missing multiple_selection in setting, using false as default")
             self.always_save = False
         
 
     def create_widgets(self):
+        log_info('Building GUI')
+
+        # init
+        self.root = tk.Tk()
+        self.root.title("AI Dataset Tagging Tool")
+        self.root.geometry("1000x800")
+
         # button style
         self.style = ttk.Style()
         self.style.configure('White.TButton', 
@@ -158,7 +161,7 @@ class FrontendClient:
         # 状态标签
         self.status_label = ttk.Label(
             self.status_bar, 
-            text="0/0",
+            text="X/X",
             anchor=tk.W
         )
         self.status_label.pack(side=tk.LEFT, padx=5)
@@ -194,11 +197,14 @@ class FrontendClient:
 
         self.labeling_button_list = []
         
+        time.sleep(10)
         # Lock until at least self.tag_cnt is available
-
         while (self.tag_cnt == None):
-            self.request_csv_data()
-            time.sleep(500)
+            log_info('No response in 50ms. Waiting for self.tag_cnt to be loaded.')
+            time.sleep(50)
+            self.request_csv_tag_info()
+        
+        log_ok(f'self.tag_cnt successfully loaded with value of {self.tag_cnt}')
 
         # single choice
         for i in range (0,self.tag_cnt):
@@ -219,8 +225,10 @@ class FrontendClient:
         self.false_button.pack(side=tk.LEFT, padx=5)
         self.root.bind('F', self.keyboard_event)
         self.root.bind('f', self.keyboard_event)
+        log_ok('GUI building successful')
     
     def connect_to_server(self,host,port):
+        log_network(f'Connecting of {host}:{port}')
         try:
             self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.sock.connect((host, port))
@@ -365,6 +373,8 @@ class FrontendClient:
 
         self.status_label.config(text=f'{self.img_index+1}/{self.data_cnt}')
 
+        log_ok('UI status updated')
+
     def request_image_multiple(self, index1, index2):
         for i in range(index1, index2+1):
             if self.img_cache == None:
@@ -405,6 +415,7 @@ class FrontendClient:
         self.sock.sendall(b'\xff\x06')
             
     def receive_data(self):
+        log_network(f'Connection established, listening for data')
         while True:
             init_char = self.sock.recv(1)
             if not init_char: break
@@ -450,7 +461,6 @@ class FrontendClient:
 
                     self.img_index = index
                     self.init_frame()
-
             
             # receive csv tag
             elif cmd == 0x02:  
@@ -546,9 +556,10 @@ class FrontendClient:
             self.img_error_msg.append(None)
             self.labeling_status.append(False)
         
-        print(f"csv list received:\n {self.data_list}")
+        log_info(f"CSV list received with size of {len(self.data_list)}")
 
     def start_client(self):
+        log_info('Starting GUI')
         self.root.mainloop()
 
 if __name__ == "__main__":
