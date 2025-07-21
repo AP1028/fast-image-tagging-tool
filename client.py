@@ -1,3 +1,4 @@
+import time
 import tkinter as tk
 from tkinter import ttk, messagebox
 from PIL import Image, ImageTk
@@ -40,6 +41,15 @@ class FrontendClient:
 
         # define socket
         self.sock = None
+
+        # define vars
+        self.data_list = []
+        self.data_column_list = []
+
+        self.data_cnt = None
+        self.img_cache = []
+        self.img_error_msg = []
+        self.labeling_status = []
 
         # initialization (this is temporarily)
         self.load_setting_file(setting_path)
@@ -182,6 +192,13 @@ class FrontendClient:
         self.labeling_frame.pack(fill=tk.X)
 
         self.labeling_button_list = []
+        
+        # Lock until at least self.tag_cnt is available
+
+        while (self.tag_cnt == None):
+            self.request_csv_data()
+            time.sleep(500)
+
         # single choice
         for i in range (0,self.tag_cnt):
             button = ttk.Button(
@@ -192,8 +209,6 @@ class FrontendClient:
             self.labeling_button_list.append(button)
             self.labeling_button_list[i].pack(side=tk.LEFT, padx=5)
             self.root.bind(str(i+1), self.keyboard_event)
-        # multiple choice
-        # ...
         # false button
         self.false_button = ttk.Button(
             self.labeling_frame, 
