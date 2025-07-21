@@ -415,7 +415,7 @@ class FrontendClient:
     def request_all_image(self):
         log_info(f'Request all image')
         for i in range(0,self.data_cnt):
-            if self.img_cache == None:
+            if self.img_cache[i] == None:
                 self.request_image(i)
         
     
