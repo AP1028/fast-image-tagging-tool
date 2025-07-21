@@ -28,6 +28,9 @@ class FrontendClient:
         # start UI
         self.create_widgets()
 
+        # init first image
+        self.get_image(self.img_index)
+
         # enter tkinter loop
         self.start_client()
 
@@ -35,20 +38,54 @@ class FrontendClient:
         self.host = '127.0.0.1'
         self.port = 52973
 
+        self.img_index = 0
+        self.multiple_selection = False
+
     def create_widgets(self):
-        # 主框架
+        # main frame
         self.main_frame = ttk.Frame(self.root, padding=10)
         self.main_frame.pack(fill=tk.BOTH, expand=True)
         
-        # 图片显示区域 (80%空间)
+        # image display (80% space)
         self.img_frame = ttk.Frame(self.main_frame)
-        self.img_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
-        
-        self.image_label = ttk.Label(self.img_frame, background='#f0f0f0')
-        self.image_label.pack(fill=tk.BOTH, expand=True)
+        self.img_frame.pack()
+        self.img_label = ttk.Label(self.img_frame)
+        self.img_label.pack()
 
-        # self.button = tk.Button(self.root, text="Click Me", command=self.get_image(1))
-        # self.button.pack(pady=20)
+        # button area
+        self.control_frame = ttk.Frame(self.root, padding=10)
+        self.control_frame.pack(fill=tk.X)
+
+        self.prev_btn = ttk.Button(self.control_frame, text="Previous Frame", command=self.prev_image)
+        self.prev_btn.pack(side=tk.LEFT, padx=5)
+        
+        self.next_btn = ttk.Button(self.control_frame, text="Next Frame", command=self.next_image)
+        self.next_btn.pack(side=tk.LEFT, padx=5)
+
+        self.next_btn = ttk.Button(self.control_frame, text="SAVE", command=self.request_save)
+        self.next_btn.pack(side=tk.LEFT, padx=5)
+
+        self.root.bind('<Left>', self.keyboard_event)
+        self.root.bind('<Right>', self.keyboard_event)
+        self.root.bind('s', self.keyboard_event)
+        self.root.bind('S', self.keyboard_event)
+
+        # label section
+        self.labeling_frame = ttk.Frame(self.root, padding=10)
+        self.labeling_frame.pack(fill=tk.X)
+
+        self.labeling_button_list = []
+
+        for i in range (0,self.tag_cnt):
+            button = ttk.Button(
+                self.labeling_frame, 
+                text=self.alias_list[i], 
+                command=lambda idx=i: self.handle_selection(idx)
+                )
+            self.labeling_button_list.append(button)
+            self.labeling_button_list[i].pack(side=tk.LEFT, padx=5)
+
+        
     
     def connect_to_server(self,host,port):
         try:
@@ -57,15 +94,92 @@ class FrontendClient:
             threading.Thread(target=self.receive_data, daemon=True).start()
             # self.request_csv()
         except ConnectionRefusedError:
-            messagebox.showerror("ERROR", "Connection Refused. Check if server is running.")
+            messagebox.showerror("ERROR", "Connection Refused. Check if server is running.")\
+    
+    def keyboard_event(self,event):
+        if event.keysym == 'Left':
+            self.prev_image()
+        elif event.keysym == 'Right':
+            self.next_image()
+        elif event.keysym == 's' or event.keysym == 'S':
+            self.request_save()
+    
+    def handle_selection(self,tag_index):
+        print(f'selecting tag {tag_index}')
+        if self.multiple_selection==False:
+            self.request_csv_change(self.img_index, self.img_index, tag_index, True)
+            for i in range(0,self.tag_cnt):
+                if i!=tag_index:
+                    self.request_csv_change(self.img_index, self.img_index, i, False)
+        else:
+            pass
+
+
+    def prev_image(self):
+        if self.img_index > 0:
+            self.get_image(self.img_index-1)
+
+    def next_image(self):
+        if self.img_index < self.data_cnt - 1:
+            self.get_image(self.img_index + 1)
 
     def get_image(self,index):
         print(f"Requesting image {index}")
         self.img_index = index
-        if self.img_cache[index] == None:
-            print(f"image {index} not found in cache, sending web request")
-            self.request_image(index)
-            # show image not found
+
+        if index < 0 or index >= self.data_cnt:
+            self.img_label.image = None
+            self.img_label.config(image='')
+
+            self.img_label.config(
+            text=f"Image {index} out of bound!",  # 错误信息
+            foreground="white",  # 文字颜色
+            background="gray",  # 背景颜色
+            font=("Arial", 24),  # 字体大小
+            anchor="center",  # 文字居中
+            justify="center"  # 多行文字居中
+            )
+            # 确保标签有足够大小显示文字
+            self.img_label.config(width=800, height=600)
+
+        elif self.img_cache[index] == None:
+            if self.img_error_msg[index] == None:
+                print(f"image {index} not found in cache, sending web request")
+                self.request_image(index)
+
+                self.img_label.image = None
+                self.img_label.config(image='')
+
+                # show image not found
+                # fake_image = Image.new("RGB", (800, 600), "gray")
+                # fake_photo = ImageTk.PhotoImage(fake_image)
+                # self.img_label.config(image=fake_photo)
+                # self.img_label.image=fake_photo
+
+                self.img_label.config(
+                text=f"Image {index} not available",  # 错误信息
+                foreground="white",  # 文字颜色
+                background="gray",  # 背景颜色
+                font=("Arial", 24),  # 字体大小
+                anchor="center",  # 文字居中
+                justify="center"  # 多行文字居中
+                )
+                # 确保标签有足够大小显示文字
+                # self.img_label.config(width=800, height=600)
+            else:
+                self.img_label.image = None
+                self.img_label.config(image='')
+
+                error_msg = self.img_error_msg[index]
+                
+                self.img_label.config(
+                text=f"Remote respond the error: {error_msg}",  # 错误信息
+                foreground="white",  # 文字颜色
+                background="gray",  # 背景颜色
+                font=("Arial", 24),  # 字体大小
+                anchor="center",  # 文字居中
+                justify="center"  # 多行文字居中
+                )
         else:
             # process image with PIL
             print(f"image {index} found in cache, printing...")
@@ -74,8 +188,8 @@ class FrontendClient:
             image.thumbnail((800, 600))  # adjust size
             photo = ImageTk.PhotoImage(image)
                 
-            self.image_label.config(image=photo)
-            self.image_label.image = photo
+            self.img_label.config(image=photo)
+            self.img_label.image=photo
 
     def request_image_multiple(self, index1, index2):
         for i in range(index1, index2+1):
@@ -114,32 +228,43 @@ class FrontendClient:
             
             # receive image
             if cmd == 0x01: 
-                data = self.sock.recv(9)
-                status, index, img_size = struct.unpack('>BII', data)
-
+                data = self.sock.recv(5)
+                status, index = struct.unpack('>BI', data)
                 # read data through chunk
-                received = 0
-                img_data = b''
-                while received < img_size:
-                    # 4kb per chunk
-                    chunk = self.sock.recv(min(4096, img_size - received))
-                    if not chunk:
-                        raise ConnectionError("Connection closed early")
-                    img_data += chunk
-                    received += len(chunk)
+                if status == 0x00:
+                    data = self.sock.recv(4)
+                    img_size = struct.unpack('>I', data)[0]
+                    received = 0
+                    img_data = b''
+                    while received < img_size:
+                        # 4kb per chunk
+                        chunk = self.sock.recv(min(4096, img_size - received))
+                        if not chunk:
+                            raise ConnectionError("Connection closed early")
+                        img_data += chunk
+                        received += len(chunk)
+                    self.handle_image(index,img_data)
+                else:
+                    print("server respond with error with photo")
+                    data = self.sock.recv(4)
+                    error_size = struct.unpack('>I', data)[0]
+                    data = self.sock.recv(error_size)
+                    error_msg = data.decode('utf-8')
+                    print(f"error is: {error_msg}")
+                    self.img_error_msg[index] = error_msg
+                    self.get_image(index)
 
-                self.handle_image(index,img_data)
             
             # receive csv tag
             elif cmd == 0x02:  
                 data = self.sock.recv(5)
-                status, tag_cnt = struct.unpack('>BI',data)
+                status, self.tag_cnt = struct.unpack('>BI',data)
                 alias_list = []
-                for i in range(0,tag_cnt):
+                for i in range(0,self.tag_cnt):
                     data =  self.sock.recv(4)
                     alias_size = struct.unpack('>I', data)[0]
                     alias_bytes =  self.sock.recv(alias_size)
-                    alias = data.decode('utf-8')
+                    alias = alias_bytes.decode('utf-8')
                     alias_list.append(alias)
                 self.handle_csv_tag(alias_list)
             
@@ -154,8 +279,8 @@ class FrontendClient:
             # ask for data size
             elif cmd == 0x05:  
                 data = self.sock.recv(5)
-                status, data_count = struct.unpack('>BI',data)
-                self.handle_data_count(data_count)
+                status, data_cnt = struct.unpack('>BI',data)
+                self.handle_data_cnt(data_cnt)
 
             else:
                 print(f"Unknown cmd byte {cmd}. Maybe check version?")
@@ -174,12 +299,14 @@ class FrontendClient:
     def handle_csv_tag(self,alias_list):
         self.alias_list = alias_list
 
-    def handle_data_count(self,data_count):
-        self.data_count = data_count
+    def handle_data_cnt(self,data_cnt):
+        self.data_cnt = data_cnt
         self.img_cache = []
+        self.img_error_msg = []
         self.labeling_status = []
-        for i in range(0,data_count):
+        for i in range(0,data_cnt):
             self.img_cache.append(None)
+            self.img_error_msg.append(None)
             self.labeling_status.append(False)
 
 

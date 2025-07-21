@@ -234,6 +234,7 @@ class BackendServer:
             error_size = len(error_bytes)
 
             conn.sendall(b'\xFF\x01\x01')
+            conn.sendall(struct.pack('>I', index))
             conn.sendall(struct.pack('>I', error_size))
             conn.sendall(error_bytes)            
 
