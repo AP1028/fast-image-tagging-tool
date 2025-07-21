@@ -58,7 +58,7 @@ class FrontendClient:
         self.request_csv_data()
         
         # start UI
-        self.create_widgets()
+        self.create_ui()
 
         # init first image
         self.img_index = 0
@@ -123,7 +123,7 @@ class FrontendClient:
             self.always_save = False
         
 
-    def create_widgets(self):
+    def create_ui(self):
         log_info('Building GUI')
 
         # init
@@ -183,13 +183,26 @@ class FrontendClient:
         self.next_btn = ttk.Button(self.control_frame, text="Next Frame", command=self.next_image)
         self.next_btn.pack(side=tk.LEFT, padx=5)
 
-        self.next_btn = ttk.Button(self.control_frame, text="SAVE", command=self.request_save)
+        self.next_btn = ttk.Button(self.control_frame, text="Load All Image", command=self.request_all_image)
+        self.next_btn.pack(side=tk.LEFT, padx=5)
+
+        self.next_btn = ttk.Button(self.control_frame, text="[S] Save", command=self.request_save)
         self.next_btn.pack(side=tk.LEFT, padx=5)
 
         self.root.bind('<Left>', self.keyboard_event)
         self.root.bind('<Right>', self.keyboard_event)
         self.root.bind('s', self.keyboard_event)
         self.root.bind('S', self.keyboard_event)
+
+        # input area
+        self.input_frame = ttk.Frame(self.root, padding=10)
+        self.input_frame.pack(fill=tk.X)
+
+        self.index_jump_input = tk.Entry(self.input_frame)
+        self.index_jump_input.pack(pady=10)
+
+        self.jump_button = tk.Button(self.input_frame, text="Jump", command=self.jump_button_input)
+        self.jump_button.pack()
 
         # label section
         self.labeling_frame = ttk.Frame(self.root, padding=10)
@@ -210,7 +223,7 @@ class FrontendClient:
         for i in range (0,self.tag_cnt):
             button = ttk.Button(
                 self.labeling_frame, 
-                text=self.alias_list[i], 
+                text=f'[{i+1}] {self.alias_list[i]}', 
                 command=lambda idx=i: self.handle_selection(idx)
                 )
             self.labeling_button_list.append(button)
@@ -219,7 +232,7 @@ class FrontendClient:
         # false button
         self.false_button = ttk.Button(
             self.labeling_frame, 
-            text='FALSE', 
+            text='[F] False', 
             command=lambda idx=-1: self.handle_selection(idx)
             )
         self.false_button.pack(side=tk.LEFT, padx=5)
@@ -255,7 +268,6 @@ class FrontendClient:
                     self.next_image()
     
     def handle_selection(self,tag_index):
-        
         # write to own csv
         # local data_list write
         print(f'selecting tag {tag_index}')
@@ -282,10 +294,25 @@ class FrontendClient:
         if self.img_index < self.data_cnt - 1:
             self.goto_frame(self.img_index+1)
     
+    def jump_button_input(self):
+        user_input = self.index_jump_input.get()
+        try:
+            jump_index = int(user_input) - 1
+            if jump_index<self.data_cnt and jump_index>=0:
+                self.goto_frame(jump_index)
+            else:
+                return
+
+        except ValueError:
+            log_info('User input not a number')
+
     def goto_frame(self,index):
-        self.img_index = index
-        self.init_frame()
-        self.update_ui()
+        if index<self.data_cnt and index>=0:
+            self.img_index = index
+            self.init_frame()
+            self.update_ui()
+        else:
+            return
 
     # update things on the screen
     def init_frame(self):
@@ -296,7 +323,7 @@ class FrontendClient:
             self.img_label.config(image='')
 
             self.img_label.config(
-            text=f"Image {self.img_index} out of bound!",  # 错误信息
+            text=f"Image {self.img_index} out of bound!\n Contact developer",  # 错误信息
             foreground="white",  # 文字颜色
             background="gray",  # 背景颜色
             font=("Arial", 24),  # 字体大小
@@ -322,7 +349,7 @@ class FrontendClient:
                 # self.img_label.image=fake_photo
 
                 self.img_label.config(
-                text=f"Image {self.img_index} loading",  # 错误信息
+                text=f"Image {self.img_index+1} requested\n Waiting for server response",  # 错误信息
                 foreground="white",  # 文字颜色
                 background="gray",  # 背景颜色
                 font=("Arial", 12),  # 字体大小
@@ -384,6 +411,13 @@ class FrontendClient:
         log_network(f'Request image {index}')
         self.sock.sendall(b'\xff\x01')
         self.sock.sendall(struct.pack('>I', index))
+
+    def request_all_image(self):
+        log_info(f'Request all image')
+        for i in range(0,self.data_cnt):
+            if self.img_cache == None:
+                self.request_image(i)
+        
     
     def request_csv_tag_info(self):
         log_network(f'Request csv tag')
@@ -430,6 +464,7 @@ class FrontendClient:
     def receive_data(self):
         log_network(f'Connection established, listening for data')
         while True:
+            self.sock.settimeout(None)
             init_char = self.sock.recv(1)
             if not init_char: break
             else:

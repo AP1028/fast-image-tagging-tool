@@ -204,6 +204,7 @@ class BackendServer:
     def handle_client(self, conn, addr):
         try:
             while True:
+                conn.settimeout(None)
                 init_char = conn.recv(1)
                 if not init_char: break
                 else:
