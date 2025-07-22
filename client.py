@@ -1,3 +1,4 @@
+import time
 import tkinter as tk
 from tkinter import ttk, messagebox
 from PIL import Image, ImageTk
@@ -34,12 +35,18 @@ def log_warn(str):
 
 class FrontendClient:
     def __init__(self,setting_path='client_setting.json'):
-        self.root = tk.Tk()
-        self.root.title("AI Dataset Tagging Tool")
-        self.root.geometry("1000x800")
-
         # define socket
         self.sock = None
+
+        # define vars
+        self.data_list = []
+        self.data_column_list = []
+
+        self.data_cnt = None
+        self.tag_cnt = None
+        self.img_cache = []
+        self.img_error_msg = []
+        self.labeling_status = []
 
         # initialization (this is temporarily)
         self.load_setting_file(setting_path)
@@ -51,7 +58,7 @@ class FrontendClient:
         self.request_csv_data()
         
         # start UI
-        self.create_widgets()
+        self.create_ui()
 
         # init first image
         self.img_index = 0
@@ -97,26 +104,44 @@ class FrontendClient:
         try:
             self.host = setting_data["host"]
         except KeyError:
-            print("Missing host in setting, using 127.0.0.1 as default")
+            log_warn("Missing host in setting, using 127.0.0.1 as default")
             self.host = "127.0.0.1"
         try:
             self.port = setting_data["port"]
         except KeyError:
-            print("Missing port in setting, using 52973 as default")
+            log_warn("Missing port in setting, using 52973 as default")
             self.port = 52973
         try:
             self.multiple_selection = setting_data["multiple_selection"]
         except KeyError:
-            print("Missing multiple_selection in setting, using false as default")
+            log_warn("Missing multiple_selection in setting, using false as default")
             self.multiple_selection = False
         try:
             self.always_save = setting_data["always_save"]
         except KeyError:
-            print("Missing multiple_selection in setting, using false as default")
+            log_warn("Missing multiple_selection in setting, using false as default")
             self.always_save = False
         
 
-    def create_widgets(self):
+    def create_ui(self):
+        log_info('Building GUI')
+
+        time.sleep(0.1)
+        # Lock until at least self.tag_cnt is available
+        while (self.tag_cnt == None or self.data_cnt == None):
+            log_warn('Resend request for self.tag_cnt and self.data_cnt to be loaded.')
+            self.request_csv_tag_info()
+            self.request_csv_data()
+            time.sleep(0.1)
+        
+        log_ok(f'successfully loaded self.tag_cnt={self.tag_cnt} and self.data_cnt={self.data_cnt}')
+
+
+        # init
+        self.root = tk.Tk()
+        self.root.title("AI Dataset Tagging Tool")
+        self.root.geometry("1000x800")
+
         # button style
         self.style = ttk.Style()
         self.style.configure('White.TButton', 
@@ -140,17 +165,23 @@ class FrontendClient:
         # main frame
         self.main_frame = ttk.Frame(self.root, padding=10)
         self.main_frame.pack(fill=tk.BOTH, expand=True)
-
+        
+        # status bar in main frame
         self.status_bar = ttk.Frame(self.main_frame, height=25, relief=tk.SUNKEN)
         self.status_bar.pack(fill=tk.X, pady=(0, 5))
 
         # 状态标签
         self.status_label = ttk.Label(
             self.status_bar, 
-            text="0/0",
+            text="X/X",
             anchor=tk.W
         )
         self.status_label.pack(side=tk.LEFT, padx=5)
+
+        # self.scale_var = tk.IntVar()
+
+        self.slider = tk.Scale(self.status_bar, from_=1, to=self.data_cnt, orient=tk.HORIZONTAL, command=self.on_slider_move)
+        self.slider.pack(fill=tk.X, expand=True)
 
         
         # image display (80% space)
@@ -169,7 +200,10 @@ class FrontendClient:
         self.next_btn = ttk.Button(self.control_frame, text="Next Frame", command=self.next_image)
         self.next_btn.pack(side=tk.LEFT, padx=5)
 
-        self.next_btn = ttk.Button(self.control_frame, text="SAVE", command=self.request_save)
+        self.next_btn = ttk.Button(self.control_frame, text="Load All Image", command=self.request_all_image)
+        self.next_btn.pack(side=tk.LEFT, padx=5)
+
+        self.next_btn = ttk.Button(self.control_frame, text="[S] Save", command=self.request_save)
         self.next_btn.pack(side=tk.LEFT, padx=5)
 
         self.root.bind('<Left>', self.keyboard_event)
@@ -182,29 +216,41 @@ class FrontendClient:
         self.labeling_frame.pack(fill=tk.X)
 
         self.labeling_button_list = []
-        # single choice
+        
         for i in range (0,self.tag_cnt):
             button = ttk.Button(
                 self.labeling_frame, 
-                text=self.alias_list[i], 
+                text=f'[{i+1}] {self.alias_list[i]}', 
                 command=lambda idx=i: self.handle_selection(idx)
                 )
             self.labeling_button_list.append(button)
             self.labeling_button_list[i].pack(side=tk.LEFT, padx=5)
             self.root.bind(str(i+1), self.keyboard_event)
-        # multiple choice
-        # ...
         # false button
         self.false_button = ttk.Button(
             self.labeling_frame, 
-            text='FALSE', 
+            text='[F] False', 
             command=lambda idx=-1: self.handle_selection(idx)
             )
         self.false_button.pack(side=tk.LEFT, padx=5)
         self.root.bind('F', self.keyboard_event)
         self.root.bind('f', self.keyboard_event)
+
+        # input section
+        # may change to sub window
+        self.input_frame = ttk.Frame(self.root, padding=10)
+        self.input_frame.pack(fill=tk.X)
+
+        self.index_jump_input = tk.Entry(self.input_frame)
+        self.index_jump_input.pack(pady=10)
+
+        self.jump_button = tk.Button(self.input_frame, text="Jump", command=self.jump_button_input)
+        self.jump_button.pack()
+
+        log_ok('GUI building successful')
     
     def connect_to_server(self,host,port):
+        log_network(f'Connecting of {host}:{port}')
         try:
             self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.sock.connect((host, port))
@@ -231,7 +277,6 @@ class FrontendClient:
                     self.next_image()
     
     def handle_selection(self,tag_index):
-        
         # write to own csv
         # local data_list write
         print(f'selecting tag {tag_index}')
@@ -258,10 +303,29 @@ class FrontendClient:
         if self.img_index < self.data_cnt - 1:
             self.goto_frame(self.img_index+1)
     
+    def jump_button_input(self):
+        user_input = self.index_jump_input.get()
+        try:
+            jump_index = int(user_input) - 1
+            if jump_index<self.data_cnt and jump_index>=0:
+                self.goto_frame(jump_index)
+            else:
+                return
+
+        except ValueError:
+            log_info('User input not a number')
+
+    def on_slider_move(self,value):
+        # slider_value = self.slider.get()
+        self.goto_frame(int(value)-1)
+
     def goto_frame(self,index):
-        self.img_index = index
-        self.init_frame()
-        self.update_ui()
+        if index<self.data_cnt and index>=0:
+            self.img_index = index
+            self.init_frame()
+            self.update_ui()
+        else:
+            return
 
     # update things on the screen
     def init_frame(self):
@@ -272,7 +336,7 @@ class FrontendClient:
             self.img_label.config(image='')
 
             self.img_label.config(
-            text=f"Image {self.img_index} out of bound!",  # 错误信息
+            text=f"Image {self.img_index} out of bound!\n Contact developer",  # 错误信息
             foreground="white",  # 文字颜色
             background="gray",  # 背景颜色
             font=("Arial", 24),  # 字体大小
@@ -298,7 +362,7 @@ class FrontendClient:
                 # self.img_label.image=fake_photo
 
                 self.img_label.config(
-                text=f"Image {self.img_index} loading",  # 错误信息
+                text=f"Image {self.img_index+1} requested\n Waiting for server response",  # 错误信息
                 foreground="white",  # 文字颜色
                 background="gray",  # 背景颜色
                 font=("Arial", 12),  # 字体大小
@@ -349,6 +413,11 @@ class FrontendClient:
 
         self.status_label.config(text=f'{self.img_index+1}/{self.data_cnt}')
 
+        # slider
+        self.slider.set(self.img_index+1)
+
+        log_ok('UI status updated')
+
     def request_image_multiple(self, index1, index2):
         for i in range(index1, index2+1):
             if self.img_cache == None:
@@ -358,6 +427,13 @@ class FrontendClient:
         log_network(f'Request image {index}')
         self.sock.sendall(b'\xff\x01')
         self.sock.sendall(struct.pack('>I', index))
+
+    def request_all_image(self):
+        log_info(f'Request all image')
+        for i in range(0,self.data_cnt):
+            if self.img_cache[i] == None:
+                self.request_image(i)
+        
     
     def request_csv_tag_info(self):
         log_network(f'Request csv tag')
@@ -365,13 +441,16 @@ class FrontendClient:
     
     def request_csv_change(self,index1,index2,write_list):
         log_network(f'Request csv change')
+        log_network(f'List to send: {write_list}')
         self.sock.sendall(b'\xff\x03')
-        self.sock.sendall(struct.pack('>III', index1,index2, self.tag_cnt))
+        self.sock.sendall(struct.pack('>III', index1,index2, self.tag_cnt ))
         for i in range(0,self.tag_cnt):
             if write_list[i]:
                 self.sock.sendall(b'\x01')
+                log_info(f'Sending True for tag {i} {self.alias_list[i]}')
             else:
                 self.sock.sendall(b'\x00')
+                log_info(f'Sending False for tag {i} {self.alias_list[i]}')
         # autosave when writing
         if(self.always_save):
             self.request_save()
@@ -387,9 +466,24 @@ class FrontendClient:
     def request_csv_data(self):
         log_network(f'Request csv data')
         self.sock.sendall(b'\xff\x06')
-            
+    
+    def recv_all(self,size):
+        self.sock.settimeout(30.0)
+        data = bytearray()
+        while len(data) < size:
+            try:
+                packet = self.sock.recv(size - len(data))
+                if not packet:
+                    raise ConnectionError("Socket connection broken")
+                data.extend(packet)
+            except socket.timeout:
+                raise TimeoutError(f"Timeout, expected length: {size}, received: {len(data)}")
+        return bytes(data)
+
     def receive_data(self):
+        log_network(f'Connection established, listening for data')
         while True:
+            self.sock.settimeout(None)
             init_char = self.sock.recv(1)
             if not init_char: break
             else:
@@ -399,24 +493,24 @@ class FrontendClient:
                     continue
             
             log_network("Header matched, reading socket message")
-            cmd = struct.unpack('B', self.sock.recv(1))[0]
+            cmd = struct.unpack('B', self.recv_all(1))[0]
             
             # receive image
             if cmd == 0x01: 
-                data = self.sock.recv(5)
+                data = self.recv_all(5)
                 status, index = struct.unpack('>BI', data)
                 # read data through chunk
                 if status == 0x00:
                     # unset failed state
                     self.img_error_msg[index] = None
 
-                    data = self.sock.recv(4)
+                    data = self.recv_all(4)
                     img_size = struct.unpack('>I', data)[0]
                     received = 0
                     img_data = b''
                     while received < img_size:
                         # 4kb per chunk
-                        chunk = self.sock.recv(min(4096, img_size - received))
+                        chunk = self.recv_all(min(4096, img_size - received))
                         if not chunk:
                             raise ConnectionError("Connection closed early")
                         img_data += chunk
@@ -425,26 +519,25 @@ class FrontendClient:
                     log_network(f"Received image {index}")
                 else:
                     print("server respond with error with photo")
-                    data = self.sock.recv(4)
+                    data = self.recv_all(4)
                     error_size = struct.unpack('>I', data)[0]
-                    data = self.sock.recv(error_size)
+                    data = self.recv_all(error_size)
                     error_msg = data.decode('utf-8')
                     print(f"error is: {error_msg}")
                     self.img_error_msg[index] = error_msg
 
-                    self.img_index = index
-                    self.init_frame()
-
+                    if self.img_index == index:
+                        self.init_frame()
             
             # receive csv tag
             elif cmd == 0x02:  
-                data = self.sock.recv(5)
+                data = self.recv_all(5)
                 status, self.tag_cnt = struct.unpack('>BI',data)
                 alias_list = []
                 for i in range(0,self.tag_cnt):
-                    data =  self.sock.recv(4)
+                    data =  self.recv_all(4)
                     alias_size = struct.unpack('>I', data)[0]
-                    alias_bytes =  self.sock.recv(alias_size)
+                    alias_bytes =  self.recv_all(alias_size)
                     alias = alias_bytes.decode('utf-8')
                     alias_list.append(alias)
                 log_network("Receive csv tag")
@@ -452,13 +545,13 @@ class FrontendClient:
             
             # CSV change completed
             elif cmd == 0x03:
-                data = self.sock.recv(1)
+                data = self.recv_all(1)
                 status = struct.unpack('>B',data)[0]
                 log_network(f"csv change complete with status {status}")
                 
             # save completed
             elif cmd == 0x04:  
-                data = self.sock.recv(1)
+                data = self.recv_all(1)
                 status = struct.unpack('>B',data)[0]
                 log_network(f"save complete with status {status}")
             
@@ -471,7 +564,7 @@ class FrontendClient:
             
             elif cmd == 0x06:  
                 log_network("receiving csv data")
-                data = self.sock.recv(5)
+                data = self.recv_all(5)
                 status, csv_size = struct.unpack('>BI', data)
                 # read data through chunk
                 if status == 0x00:
@@ -479,7 +572,7 @@ class FrontendClient:
                     csv_bytes = b''
                     while received < csv_size:
                         # 4kb per chunk
-                        chunk = self.sock.recv(min(4096, csv_size - received))
+                        chunk = self.recv_all(min(4096, csv_size - received))
                         if not chunk:
                             raise ConnectionError("Connection closed early")
                         csv_bytes += chunk
@@ -530,9 +623,10 @@ class FrontendClient:
             self.img_error_msg.append(None)
             self.labeling_status.append(False)
         
-        print(f"csv list received:\n {self.data_list}")
+        log_info(f"CSV list received with size of {len(self.data_list)}")
 
     def start_client(self):
+        log_info('Starting GUI')
         self.root.mainloop()
 
 if __name__ == "__main__":

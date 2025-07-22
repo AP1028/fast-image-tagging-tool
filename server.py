@@ -56,28 +56,32 @@ class BackendServer:
         try:
             self.host = setting_data["host"]
         except KeyError:
-            print("Missing host in setting, using 0.0.0.0 as default")
+            log_warn("Missing host in setting, using 0.0.0.0 as default")
             self.host = "0.0.0.0"
         try:
             self.port = setting_data["port"]
         except KeyError:
-            print("Missing port in setting, using 52973 as default")
+            log_warn("Missing port in setting, using 52973 as default")
             self.port = 52973
         try:
             self.csv_dir = setting_data["csv_dir"]
         except KeyError:
-            print("Missing csv_dir, using 'data' as default")
+            log_warn("Missing csv_dir, using 'data' as default")
             self.csv_dir = "data"
         try:
             self.csv_save_dir = setting_data["csv_save_dir"]
         except KeyError:
-            print("Missing csv_save_dir, using 'data' as default")
+            log_warn("Missing csv_save_dir, using 'data' as default")
             self.csv_save_dir = "data"
         try:
             self.tag_path = setting_data["tag_path"]
         except KeyError:
-            print("Missing tag_path, using 'tag.csv' as default")
+            log_warn("Missing tag_path, using 'tag.csv' as default")
             self.tag_path = "tag.csv"
+
+    
+    
+
 
     def handle_csv(self):
         self.data_csv = pd.read_csv(self.csv_dir)
@@ -90,11 +94,20 @@ class BackendServer:
         
         # self.data_list[row][column]
 
+        log_info(f"Data CSV loaded with size of {len(self.data_csv)}")
+        log_info(f"Tag CSV loaded with size of {len(self.data_csv)}")
+        log_info(f"data_list loaded with size of {len(self.data_list)}")
+        log_info(f"tag_data_list loaded with size of {len(self.tag_data_list)}")
+        
+        log_info(f"data_column_list: \n{self.data_column_list}")
+        log_info(f"tag_data_column_list: \n{self.tag_data_column_list}")
+
         # get tag code entry
         cnt = 0
         for entry in self.tag_data_column_list:
             if entry.strip() == 'code':
                 self.tag_entry_code = cnt
+                log_info(f"Tag CSV has column at {self.tag_entry_code} matching 'code'")
                 break
             cnt+=1
         
@@ -103,6 +116,7 @@ class BackendServer:
         for entry in self.tag_data_column_list:
             if entry.strip() == 'alias':
                 self.tag_entry_alias = cnt
+                log_info(f"Tag CSV has column at {self.tag_entry_alias} matching 'alias'")
                 break
             cnt+=1
         
@@ -111,6 +125,7 @@ class BackendServer:
         for entry in self.data_column_list:
             if entry.strip() == 'file_path':
                 self.tag_entry_file_path = cnt
+                log_info(f"Data CSV has column at {self.tag_entry_file_path} matching 'file_path'")
                 break
             cnt+=1
 
@@ -123,15 +138,18 @@ class BackendServer:
         cnt = 0
         # search for column entry matching tag_code_ to get required tag code
         # and column entry number
+        log_info("Checking data_column_list for entry matching 'tag_code_*'")
         for entry in self.data_column_list:
             if entry.strip()[0:9] == 'tag_code_':
                 self.tag_code_list.append(int(entry.strip()[9:19]))
                 self.tag_column_entry.append(cnt)
+                log_info(f"Loaded tag code at column {cnt} with code {int(entry.strip()[9:19])}")
             else:
                 self.non_tag_data_column_list.append(entry)
             cnt+=1
         # search matching tag code in 'code' entry in tag csv list 
         # and record the alias
+        log_info("Checking tag code list for alias name")
         for tag_code in self.tag_code_list:
             alias = f"{tag_code}_fallback"
             for i in range(0,len(self.tag_data_list)):
@@ -139,6 +157,7 @@ class BackendServer:
                     alias = self.tag_data_list[i][self.tag_entry_alias]
                     break
             self.tag_column_alias.append(alias)
+            log_info(f"Found alias {alias}")
         # get total tag cnt
         self.tag_cnt = len(self.tag_column_entry)
         self.data_cnt = len(self.data_list)
@@ -148,8 +167,8 @@ class BackendServer:
         if os.path.isdir(self.csv_save_dir)==False:
             os.mkdir(self.csv_save_dir)
             
-        df.to_csv(f"{self.csv_save_dir}/save.csv", index=False)
-        print(f"File saved to: {self.csv_save_dir}/save.csv")
+        df.to_csv(f"{self.csv_save_dir}/labeled_{self.csv_dir}", index=False)
+        print(f"File saved to: {self.csv_save_dir}/labeled_{self.csv_dir}")
     
     def start(self):
         self.handle_csv()
@@ -169,9 +188,23 @@ class BackendServer:
                 )
                 client_thread.start()
 
+    def recv_all(self,conn,size):
+        conn.settimeout(30.0)
+        data = bytearray()
+        while len(data) < size:
+            try:
+                packet = conn.recv(size - len(data))
+                if not packet:
+                    raise ConnectionError("Socket connection broken")
+                data.extend(packet)
+            except socket.timeout:
+                raise TimeoutError(f"Timeout, expected length: {size}, received: {len(data)}")
+        return bytes(data)
+    
     def handle_client(self, conn, addr):
         try:
             while True:
+                conn.settimeout(None)
                 init_char = conn.recv(1)
                 if not init_char: break
                 else:
@@ -181,11 +214,11 @@ class BackendServer:
                         continue
                 
                 log_network("Header matched, reading socket message")
-                cmd = struct.unpack('B', conn.recv(1))[0]
+                cmd = struct.unpack('B', self.recv_all(conn,1))[0]
                 
                 # request image
                 if cmd == 0x01: 
-                    data = conn.recv(8)
+                    data = self.recv_all(conn,4)
                     index= struct.unpack('>I', data)[0]
 
                     log_network(f'Received request for image {index}')
@@ -198,11 +231,22 @@ class BackendServer:
                     self._send_tag(conn)
                     
                 elif cmd == 0x03:  # request csv change
-                    data = conn.recv(12)
+                    data = self.recv_all(conn,12)
                     csv_data_slice = []
                     index1, index2, tag_index_cnt = struct.unpack('>III', data)
+
+                    print(f"{index1},{index2},{tag_index_cnt}")
+                    
                     for i in range (0,tag_index_cnt):
-                        status = bool(conn.recv(1))
+                        byte = self.recv_all(conn,1)
+                        if byte == b'\x01':
+                            status = True
+                        else:
+                            status = False
+
+                        print(f"self.recv_all(conn,1): {byte}")
+                        print(f"status: {status}")
+                        
                         csv_data_slice.append(status)
                     
                     log_network(f'Received request for CSV change, from index {index1} to {index2}')
@@ -234,25 +278,25 @@ class BackendServer:
 
     def _send_image(self, conn, index):
         # server will send image from index1 to index2
-        print(f"send image {index}")
         
         if index>= self.data_cnt or index<0:
             print("Error: you are requesting out of bound operation")
             return
         
         image_path = self.data_list[index][self.tag_entry_file_path]
-        print(f'Need to send image {index}, path is {image_path}')
+        log_info(f'Request received sending image {index} with path {image_path}')
         
         try:
             with open(image_path, 'rb') as f:
                 image_data = f.read()
             
-            print("sending image")
             image_size = len(image_data)
+            log_network(f"Sending image with size {image_size}")
             conn.sendall(b'\xFF\x01\x00')
             conn.sendall(struct.pack('>I', index))
             conn.sendall(struct.pack('>I', image_size))
             conn.sendall(image_data)
+            log_network(f"Sending complete")
         
         except IOError as error:
             print("image ioerror")
