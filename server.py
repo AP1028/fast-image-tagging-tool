@@ -167,8 +167,8 @@ class BackendServer:
         if os.path.isdir(self.csv_save_dir)==False:
             os.mkdir(self.csv_save_dir)
             
-        df.to_csv(f"{self.csv_save_dir}/save.csv", index=False)
-        print(f"File saved to: {self.csv_save_dir}/save.csv")
+        df.to_csv(f"{self.csv_save_dir}/labeled_{self.csv_dir}", index=False)
+        print(f"File saved to: {self.csv_save_dir}/labeled_{self.csv_dir}")
     
     def start(self):
         self.handle_csv()

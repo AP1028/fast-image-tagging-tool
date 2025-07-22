@@ -126,6 +126,17 @@ class FrontendClient:
     def create_ui(self):
         log_info('Building GUI')
 
+        time.sleep(0.1)
+        # Lock until at least self.tag_cnt is available
+        while (self.tag_cnt == None or self.data_cnt == None):
+            log_warn('Resend request for self.tag_cnt and self.data_cnt to be loaded.')
+            self.request_csv_tag_info()
+            self.request_csv_data()
+            time.sleep(0.1)
+        
+        log_ok(f'successfully loaded self.tag_cnt={self.tag_cnt} and self.data_cnt={self.data_cnt}')
+
+
         # init
         self.root = tk.Tk()
         self.root.title("AI Dataset Tagging Tool")
@@ -154,7 +165,8 @@ class FrontendClient:
         # main frame
         self.main_frame = ttk.Frame(self.root, padding=10)
         self.main_frame.pack(fill=tk.BOTH, expand=True)
-
+        
+        # status bar in main frame
         self.status_bar = ttk.Frame(self.main_frame, height=25, relief=tk.SUNKEN)
         self.status_bar.pack(fill=tk.X, pady=(0, 5))
 
@@ -165,6 +177,11 @@ class FrontendClient:
             anchor=tk.W
         )
         self.status_label.pack(side=tk.LEFT, padx=5)
+
+        # self.scale_var = tk.IntVar()
+
+        self.slider = tk.Scale(self.status_bar, from_=1, to=self.data_cnt, orient=tk.HORIZONTAL, command=self.on_slider_move)
+        self.slider.pack(fill=tk.X, expand=True)
 
         
         # image display (80% space)
@@ -194,32 +211,12 @@ class FrontendClient:
         self.root.bind('s', self.keyboard_event)
         self.root.bind('S', self.keyboard_event)
 
-        # input area
-        self.input_frame = ttk.Frame(self.root, padding=10)
-        self.input_frame.pack(fill=tk.X)
-
-        self.index_jump_input = tk.Entry(self.input_frame)
-        self.index_jump_input.pack(pady=10)
-
-        self.jump_button = tk.Button(self.input_frame, text="Jump", command=self.jump_button_input)
-        self.jump_button.pack()
-
         # label section
         self.labeling_frame = ttk.Frame(self.root, padding=10)
         self.labeling_frame.pack(fill=tk.X)
 
         self.labeling_button_list = []
         
-        time.sleep(0.1)
-        # Lock until at least self.tag_cnt is available
-        while (self.tag_cnt == None):
-            log_info('No response in 0.1s. Waiting for self.tag_cnt to be loaded.')
-            time.sleep(0.1)
-            self.request_csv_tag_info()
-        
-        log_ok(f'self.tag_cnt successfully loaded with value of {self.tag_cnt}')
-
-        # single choice
         for i in range (0,self.tag_cnt):
             button = ttk.Button(
                 self.labeling_frame, 
@@ -238,6 +235,18 @@ class FrontendClient:
         self.false_button.pack(side=tk.LEFT, padx=5)
         self.root.bind('F', self.keyboard_event)
         self.root.bind('f', self.keyboard_event)
+
+        # input section
+        # may change to sub window
+        self.input_frame = ttk.Frame(self.root, padding=10)
+        self.input_frame.pack(fill=tk.X)
+
+        self.index_jump_input = tk.Entry(self.input_frame)
+        self.index_jump_input.pack(pady=10)
+
+        self.jump_button = tk.Button(self.input_frame, text="Jump", command=self.jump_button_input)
+        self.jump_button.pack()
+
         log_ok('GUI building successful')
     
     def connect_to_server(self,host,port):
@@ -305,6 +314,10 @@ class FrontendClient:
 
         except ValueError:
             log_info('User input not a number')
+
+    def on_slider_move(self,value):
+        # slider_value = self.slider.get()
+        self.goto_frame(int(value)-1)
 
     def goto_frame(self,index):
         if index<self.data_cnt and index>=0:
