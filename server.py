@@ -195,10 +195,10 @@ class BackendServer:
             try:
                 packet = conn.recv(size - len(data))
                 if not packet:
-                    raise ConnectionError("Socket connection broken")
+                    log_network("Socket connection broken")
                 data.extend(packet)
             except socket.timeout:
-                raise TimeoutError(f"Timeout, expected length: {size}, received: {len(data)}")
+                log_network(f"Timeout, expected length: {size}, received: {len(data)}")
         return bytes(data)
     
     def handle_client(self, conn, addr):
@@ -210,7 +210,7 @@ class BackendServer:
                 else:
                     verifier = struct.unpack('B', init_char)[0]
                     if verifier != 0xFF: 
-                        print(f"Bad byte of {verifier}, dropping byte")
+                        log_network(f"Bad byte of {verifier}, dropping byte")
                         continue
                 
                 log_network("Header matched, reading socket message")
@@ -234,8 +234,6 @@ class BackendServer:
                     data = self.recv_all(conn,12)
                     csv_data_slice = []
                     index1, index2, tag_index_cnt = struct.unpack('>III', data)
-
-                    print(f"{index1},{index2},{tag_index_cnt}")
                     
                     for i in range (0,tag_index_cnt):
                         byte = self.recv_all(conn,1)
@@ -243,9 +241,6 @@ class BackendServer:
                             status = True
                         else:
                             status = False
-
-                        print(f"self.recv_all(conn,1): {byte}")
-                        print(f"status: {status}")
                         
                         csv_data_slice.append(status)
                     
@@ -269,10 +264,10 @@ class BackendServer:
                     self._send_partial_csv(conn)
 
                 else:
-                    print(f"Unknown cmd byte {cmd}. Maybe check version?")
+                    log_network(f"Unknown cmd byte {cmd}. Maybe check version?")
                     
         except ConnectionResetError:
-            print(f"Client {addr} disconnected")
+            log_network(f"Client {addr} disconnected")
         finally:
             conn.close()
 

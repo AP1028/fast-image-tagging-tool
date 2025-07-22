@@ -37,6 +37,7 @@ class FrontendClient:
     def __init__(self,setting_path='client_setting.json'):
         # define socket
         self.sock = None
+        self.connected = False
 
         # define vars
         self.data_list = []
@@ -253,11 +254,37 @@ class FrontendClient:
         log_network(f'Connecting of {host}:{port}')
         try:
             self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.sock.settimeout(3.0)
             self.sock.connect((host, port))
+            self.connected = True
             threading.Thread(target=self.receive_data, daemon=True).start()
             # self.request_csv()
-        except ConnectionRefusedError:
-            messagebox.showerror("ERROR", "Connection Refused. Check if server is running.")\
+        except (ConnectionRefusedError,socket.timeout) as e:
+            log_error(f"Connection failed: {str(e)}")
+            messagebox.showwarning("Connection Error", 
+                                  f"Failed to connect to server at {host}:{port}\n{str(e)}")
+        except Exception as e:
+            self.connected = False
+            log_error(f"Unexpected connection error: {str(e)}")
+            messagebox.showerror("Connection Error", 
+                                f"Unexpected error: {str(e)}")
+    
+    def reconnect(self):
+        if self.connected:
+            log_info("Already connected, no need to reconnect")
+            return
+
+        if self.sock:
+            try:
+                self.sock.close()
+            except:
+                pass
+            self.sock = None
+        
+        self.connect_to_server(self.host, self.port)
+        
+        if self.connected:
+            log_ok("Reconnection successful")
     
     def keyboard_event(self,event):
         if event.keysym == 'Left':
@@ -279,7 +306,7 @@ class FrontendClient:
     def handle_selection(self,tag_index):
         # write to own csv
         # local data_list write
-        print(f'selecting tag {tag_index}')
+        log_info(f'selecting tag {tag_index}')
         if tag_index == -1:
             for i in range(0,self.tag_cnt):
                 self.data_list[self.img_index][i] = False
@@ -390,7 +417,7 @@ class FrontendClient:
                 )
         else:
             # process image with PIL
-            print(f"image {self.img_index} found in cache, printing...")
+            log_info(f"image {self.img_index} found in cache, printing...")
             img_data = self.img_cache[self.img_index]
             image = Image.open(io.BytesIO(img_data))
             image.thumbnail((796, 448))  # adjust size
@@ -474,115 +501,132 @@ class FrontendClient:
             try:
                 packet = self.sock.recv(size - len(data))
                 if not packet:
-                    raise ConnectionError("Socket connection broken")
+                    raise log_network("Socket connection broken")
                 data.extend(packet)
             except socket.timeout:
-                raise TimeoutError(f"Timeout, expected length: {size}, received: {len(data)}")
+                raise log_network(f"Timeout, expected length: {size}, received: {len(data)}")
         return bytes(data)
 
     def receive_data(self):
         log_network(f'Connection established, listening for data')
-        while True:
-            self.sock.settimeout(None)
-            init_char = self.sock.recv(1)
-            if not init_char: break
-            else:
-                verifier = struct.unpack('B', init_char)[0]
-                if verifier != 0xFF: 
-                    log_network(f"Bad byte of {verifier}, dropping byte")
-                    continue
-            
-            log_network("Header matched, reading socket message")
-            cmd = struct.unpack('B', self.recv_all(1))[0]
-            
-            # receive image
-            if cmd == 0x01: 
-                data = self.recv_all(5)
-                status, index = struct.unpack('>BI', data)
-                # read data through chunk
-                if status == 0x00:
-                    # unset failed state
-                    self.img_error_msg[index] = None
-
-                    data = self.recv_all(4)
-                    img_size = struct.unpack('>I', data)[0]
-                    received = 0
-                    img_data = b''
-                    while received < img_size:
-                        # 4kb per chunk
-                        chunk = self.recv_all(min(4096, img_size - received))
-                        if not chunk:
-                            raise ConnectionError("Connection closed early")
-                        img_data += chunk
-                        received += len(chunk)
-                    self.handle_image(index,img_data)
-                    log_network(f"Received image {index}")
+        try:
+            while True:
+                self.sock.settimeout(None)
+                init_char = self.sock.recv(1)
+                if not init_char: break
                 else:
-                    print("server respond with error with photo")
-                    data = self.recv_all(4)
-                    error_size = struct.unpack('>I', data)[0]
-                    data = self.recv_all(error_size)
-                    error_msg = data.decode('utf-8')
-                    print(f"error is: {error_msg}")
-                    self.img_error_msg[index] = error_msg
-
-                    if self.img_index == index:
-                        self.init_frame()
-            
-            # receive csv tag
-            elif cmd == 0x02:  
-                data = self.recv_all(5)
-                status, self.tag_cnt = struct.unpack('>BI',data)
-                alias_list = []
-                for i in range(0,self.tag_cnt):
-                    data =  self.recv_all(4)
-                    alias_size = struct.unpack('>I', data)[0]
-                    alias_bytes =  self.recv_all(alias_size)
-                    alias = alias_bytes.decode('utf-8')
-                    alias_list.append(alias)
-                log_network("Receive csv tag")
-                self.handle_csv_tag(alias_list)
-            
-            # CSV change completed
-            elif cmd == 0x03:
-                data = self.recv_all(1)
-                status = struct.unpack('>B',data)[0]
-                log_network(f"csv change complete with status {status}")
+                    verifier = struct.unpack('B', init_char)[0]
+                    if verifier != 0xFF: 
+                        log_network(f"Bad byte of {verifier}, dropping byte")
+                        continue
                 
-            # save completed
-            elif cmd == 0x04:  
-                data = self.recv_all(1)
-                status = struct.unpack('>B',data)[0]
-                log_network(f"save complete with status {status}")
-            
-            # ask for data size
-            # elif cmd == 0x05:  
-            #     log_network("receiving data size")
-            #     data = self.sock.recv(5)
-            #     status, data_cnt = struct.unpack('>BI',data)
-            #     self.handle_data_cnt(data_cnt)
-            
-            elif cmd == 0x06:  
-                log_network("receiving csv data")
-                data = self.recv_all(5)
-                status, csv_size = struct.unpack('>BI', data)
-                # read data through chunk
-                if status == 0x00:
-                    received = 0
-                    csv_bytes = b''
-                    while received < csv_size:
-                        # 4kb per chunk
-                        chunk = self.recv_all(min(4096, csv_size - received))
-                        if not chunk:
-                            raise ConnectionError("Connection closed early")
-                        csv_bytes += chunk
-                        received += len(chunk)
-                    self.handle_csv(csv_bytes)
-                else:
-                    pass
+                log_network("Header matched, reading socket message")
+                cmd = struct.unpack('B', self.recv_all(1))[0]
+                
+                # receive image
+                if cmd == 0x01: 
+                    data = self.recv_all(5)
+                    status, index = struct.unpack('>BI', data)
+                    # read data through chunk
+                    if status == 0x00:
+                        # unset failed state
+                        self.img_error_msg[index] = None
 
-            else:
-                log_network(f"Unknown cmd byte {cmd}. Maybe check version?")
+                        data = self.recv_all(4)
+                        img_size = struct.unpack('>I', data)[0]
+                        received = 0
+                        img_data = b''
+                        while received < img_size:
+                            # 4kb per chunk
+                            chunk = self.recv_all(min(4096, img_size - received))
+                            if not chunk:
+                                raise ConnectionError("Connection closed early")
+                            img_data += chunk
+                            received += len(chunk)
+                        self.handle_image(index,img_data)
+                        log_network(f"Received image {index}")
+                    else:
+                        log_network("Server respond with error with image")
+                        data = self.recv_all(4)
+                        error_size = struct.unpack('>I', data)[0]
+                        data = self.recv_all(error_size)
+                        error_msg = data.decode('utf-8')
+                        log_network(f"Error received: {error_msg}")
+                        self.img_error_msg[index] = error_msg
+
+                        if self.img_index == index:
+                            self.init_frame()
+                
+                # receive csv tag
+                elif cmd == 0x02:  
+                    data = self.recv_all(5)
+                    status, self.tag_cnt = struct.unpack('>BI',data)
+                    alias_list = []
+                    for i in range(0,self.tag_cnt):
+                        data =  self.recv_all(4)
+                        alias_size = struct.unpack('>I', data)[0]
+                        alias_bytes =  self.recv_all(alias_size)
+                        alias = alias_bytes.decode('utf-8')
+                        alias_list.append(alias)
+                    log_network("Receive csv tag")
+                    self.handle_csv_tag(alias_list)
+                
+                # CSV change completed
+                elif cmd == 0x03:
+                    data = self.recv_all(1)
+                    status = struct.unpack('>B',data)[0]
+                    log_network(f"csv change complete with status {status}")
+                    
+                # save completed
+                elif cmd == 0x04:  
+                    data = self.recv_all(1)
+                    status = struct.unpack('>B',data)[0]
+                    log_network(f"save complete with status {status}")
+                
+                # ask for data size
+                # elif cmd == 0x05:  
+                #     log_network("receiving data size")
+                #     data = self.sock.recv(5)
+                #     status, data_cnt = struct.unpack('>BI',data)
+                #     self.handle_data_cnt(data_cnt)
+                
+                elif cmd == 0x06:  
+                    log_network("receiving csv data")
+                    data = self.recv_all(5)
+                    status, csv_size = struct.unpack('>BI', data)
+                    # read data through chunk
+                    if status == 0x00:
+                        received = 0
+                        csv_bytes = b''
+                        while received < csv_size:
+                            # 4kb per chunk
+                            chunk = self.recv_all(min(4096, csv_size - received))
+                            if not chunk:
+                                raise ConnectionError("Connection closed early")
+                            csv_bytes += chunk
+                            received += len(chunk)
+                        self.handle_csv(csv_bytes)
+                    else:
+                        pass
+
+                else:
+                    log_network(f"Unknown cmd byte {cmd}. Maybe check version?")
+        except ConnectionResetError:
+            log_network("Connection reset by server")
+            self.connected = False
+        except socket.timeout:
+            log_network("Socket timeout, connection may be lost")
+            self.connected = False
+        except Exception as e:
+            log_network(f"Unexpected error in receive_data: {str(e)}")
+            self.connected = False
+        finally:
+            if self.sock:
+                try:
+                    self.sock.close()
+                except:
+                    pass
+                self.sock = None
 
     def handle_image(self, index, img_data):
         if not img_data:
