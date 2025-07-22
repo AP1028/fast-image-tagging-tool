@@ -176,7 +176,7 @@ class BackendServer:
             s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             s.bind((self.host, self.port))
             s.listen()
-            print(f"Server listening on {self.host}:{self.port}")
+            log_network(f"Server listening on {self.host}:{self.port}")
 
             while True:
                 conn, addr = s.accept()
