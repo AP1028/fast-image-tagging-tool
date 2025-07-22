@@ -239,7 +239,7 @@ class BackendServer:
                     
                     for i in range (0,tag_index_cnt):
                         byte = self.recv_all(conn,1)
-                        if byte == b'x01':
+                        if byte == b'\x01':
                             status = True
                         else:
                             status = False
