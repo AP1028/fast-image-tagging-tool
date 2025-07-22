@@ -236,6 +236,8 @@ class BackendServer:
                     index1, index2, tag_index_cnt = struct.unpack('>III', data)
                     for i in range (0,tag_index_cnt):
                         status = bool(self.recv_all(conn,1))
+                        print(f"self.recv_all(conn,1): {self.recv_all(conn,1)}")
+                        print(f"status: {status}")
                         csv_data_slice.append(status)
                     
                     log_network(f'Received request for CSV change, from index {index1} to {index2}')
