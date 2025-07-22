@@ -413,6 +413,9 @@ class FrontendClient:
 
         self.status_label.config(text=f'{self.img_index+1}/{self.data_cnt}')
 
+        # slider
+        self.slider.set(self.img_index+1)
+
         log_ok('UI status updated')
 
     def request_image_multiple(self, index1, index2):
