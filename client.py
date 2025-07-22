@@ -441,7 +441,7 @@ class FrontendClient:
     
     def request_csv_change(self,index1,index2,write_list):
         log_network(f'Request csv change')
-        log_network(f'List to send: write_list')
+        log_network(f'List to send: {write_list}')
         self.sock.sendall(b'\xff\x03')
         self.sock.sendall(struct.pack('>III', index1,index2, self.tag_cnt))
         for i in range(0,self.tag_cnt):
@@ -450,7 +450,7 @@ class FrontendClient:
                 log_info(f'Sending true for tag {i} {self.alias_list[i]}')
             else:
                 self.sock.sendall(b'\x00')
-                log_info(f'Sending true for tag {i} {self.alias_list[i]}')
+                log_info(f'Sending false for tag {i} {self.alias_list[i]}')
         # autosave when writing
         if(self.always_save):
             self.request_save()
