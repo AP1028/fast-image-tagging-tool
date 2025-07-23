@@ -381,12 +381,6 @@ class FrontendClient:
                 self.img_label.image = None
                 self.img_label.config(image='')
 
-                # show image not found
-                # fake_image = Image.new("RGB", (796, 448), "gray")
-                # fake_photo = ImageTk.PhotoImage(fake_image)
-                # self.img_label.config(image=fake_photo)
-                # self.img_label.image=fake_photo
-
                 self.img_label.config(
                 text=f"Image {self.img_index+1} requested\n Waiting for server response",  # 错误信息
                 foreground="white",  # 文字颜色
@@ -395,7 +389,6 @@ class FrontendClient:
                 anchor="center",  # 文字居中
                 justify="center"  # 多行文字居中
                 )
-                # 确保标签有足够大小显示文字
                 # self.img_label.config(width=800, height=600)
 
             # image in cache
