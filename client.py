@@ -316,8 +316,7 @@ class FrontendClient:
                 if i!=tag_index:
                     self.data_list[self.img_index][i] = False
         else:
-            # TO DO: multiple selection
-            pass
+            self.data_list[self.img_index][tag_index] = not self.data_list[self.img_index][tag_index]
 
         self.request_csv_change(self.img_index,self.img_index,self.data_list[self.img_index])
         self.update_ui()
