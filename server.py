@@ -168,7 +168,7 @@ class BackendServer:
             os.mkdir(self.csv_save_dir)
             
         df.to_csv(f"{self.csv_save_dir}/labeled_{self.csv_dir}", index=False)
-        print(f"File saved to: {self.csv_save_dir}/labeled_{self.csv_dir}")
+        log_info(f"File saved to: {self.csv_save_dir}/labeled_{self.csv_dir}")
     
     def start(self):
         self.handle_csv()
@@ -180,7 +180,7 @@ class BackendServer:
 
             while True:
                 conn, addr = s.accept()
-                print(f"Connected by {addr}")
+                log_network(f"Connected by {addr}")
                 client_thread = threading.Thread(
                     target=self.handle_client, 
                     args=(conn, addr),
@@ -275,7 +275,7 @@ class BackendServer:
         # server will send image from index1 to index2
         
         if index>= self.data_cnt or index<0:
-            print("Error: you are requesting out of bound operation")
+            log_error("Error: you are requesting out of bound operation")
             return
         
         image_path = self.data_list[index][self.tag_entry_file_path]
@@ -294,7 +294,7 @@ class BackendServer:
             log_network(f"Sending complete")
         
         except IOError as error:
-            print("image ioerror")
+            log_error("Image ioerror!")
             error_str = str(error)
             error_bytes = error_str.encode('utf-8')
             error_size = len(error_bytes)
@@ -306,7 +306,7 @@ class BackendServer:
 
     def _send_tag(self, conn):
         # send csv tag encoded
-        print(f'Need to send {self.tag_column_alias}')
+        log_info(f'Need to send {self.tag_column_alias}')
         conn.sendall(b'\xff\x02\x00')
         conn.sendall(struct.pack('>I', self.tag_cnt))
         for alias in self.tag_column_alias:
@@ -317,16 +317,16 @@ class BackendServer:
 
     def _update_tag(self, conn, index1, index2, csv_data_slice):
         # update tag in csv database, from index1 to index2
-        print(f"update tag {index1}, {index2}, {csv_data_slice}")
+        log_info(f"update tag {index1}, {index2}, {csv_data_slice}")
 
         if index2 >= self.data_cnt or len(csv_data_slice)!=self.tag_cnt:
-            print("Error: you are requesting mismatch / out of bound operation")
+            log_error("Error: you are requesting mismatch / out of bound operation")
             return
 
         for i in range(index1, index2+1):
             for j in range (0,self.tag_cnt):
                 self.data_list[i][self.tag_column_entry[j]] = csv_data_slice[j]
-                print(f'writing row {i} column {self.tag_column_entry[j]} to {csv_data_slice[j]}')
+                log_info(f'writing row {i} column {self.tag_column_entry[j]} to {csv_data_slice[j]}')
     
     
     # def _send_data_count(self,conn):
