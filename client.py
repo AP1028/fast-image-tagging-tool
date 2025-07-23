@@ -268,12 +268,30 @@ class FrontendClient:
             log_error(f"Unexpected connection error: {str(e)}")
             messagebox.showerror("Connection Error", 
                                 f"Unexpected error: {str(e)}")
+            
+    def is_connected(self):
+        if self.sock is None: self.connected = False
+        return self.connected and self.sock is not None
     
-    def reconnect(self):
-        if self.connected:
-            log_info("Already connected, no need to reconnect")
-            return
-
+    def safe_sendall(self,data):
+        if not self.is_connected():
+            log_error("Cannot send data: not connected to server")
+            return False
+        try:
+            self.sock.sendall(data)
+            return True
+        except (socket.error, OSError) as e:
+            log_error(f"Error sending data: {str(e)}")
+            self.connected = False
+            self.close_sock()
+            return False
+        except Exception as e:
+            log_error(f"Unexpected error sending data: {str(e)}")
+            self.connected = False
+            self.close_sock()
+            return False
+    
+    def close_sock(self):
         if self.sock:
             try:
                 self.sock.close()
@@ -281,9 +299,16 @@ class FrontendClient:
                 pass
             self.sock = None
         
+    def reconnect(self):
+        if self.is_connected():
+            log_info("Already connected, no need to reconnect")
+            return
+
+        self.close_sock()
+        
         self.connect_to_server(self.host, self.port)
         
-        if self.connected:
+        if self.is_connected():
             log_ok("Reconnection successful")
     
     def keyboard_event(self,event):
@@ -444,8 +469,8 @@ class FrontendClient:
     
     def request_image(self, index):
         log_network(f'Request image {index}')
-        self.sock.sendall(b'\xff\x01')
-        self.sock.sendall(struct.pack('>I', index))
+        self.safe_sendall(b'\xff\x01')
+        self.safe_sendall(struct.pack('>I', index))
 
     def request_all_image(self):
         log_info(f'Request all image')
@@ -456,19 +481,19 @@ class FrontendClient:
     
     def request_csv_tag_info(self):
         log_network(f'Request csv tag')
-        self.sock.sendall(b'\xff\x02')
+        self.safe_sendall(b'\xff\x02')
     
     def request_csv_change(self,index1,index2,write_list):
         log_network(f'Request csv change')
         log_network(f'List to send: {write_list}')
-        self.sock.sendall(b'\xff\x03')
-        self.sock.sendall(struct.pack('>III', index1,index2, self.tag_cnt ))
+        self.safe_sendall(b'\xff\x03')
+        self.safe_sendall(struct.pack('>III', index1,index2, self.tag_cnt ))
         for i in range(0,self.tag_cnt):
             if write_list[i]:
-                self.sock.sendall(b'\x01')
+                self.safe_sendall(b'\x01')
                 log_info(f'Sending True for tag {i} {self.alias_list[i]}')
             else:
-                self.sock.sendall(b'\x00')
+                self.safe_sendall(b'\x00')
                 log_info(f'Sending False for tag {i} {self.alias_list[i]}')
         # autosave when writing
         if(self.always_save):
@@ -476,15 +501,15 @@ class FrontendClient:
     
     def request_save(self):
         log_network(f'Request save')
-        self.sock.sendall(b'\xff\x04')
+        self.safe_sendall(b'\xff\x04')
     
     def request_data_cnt(self):
         log_network(f'Request data cnt')
-        self.sock.sendall(b'\xff\x05')
+        self.safe_sendall(b'\xff\x05')
     
     def request_csv_data(self):
         log_network(f'Request csv data')
-        self.sock.sendall(b'\xff\x06')
+        self.safe_sendall(b'\xff\x06')
     
     def recv_all(self,size):
         self.sock.settimeout(30.0)
@@ -493,10 +518,10 @@ class FrontendClient:
             try:
                 packet = self.sock.recv(size - len(data))
                 if not packet:
-                    raise log_network("Socket connection broken")
+                    log_error("Socket connection broken")
                 data.extend(packet)
             except socket.timeout:
-                raise log_network(f"Timeout, expected length: {size}, received: {len(data)}")
+                log_error(f"Timeout, expected length: {size}, received: {len(data)}")
         return bytes(data)
 
     def receive_data(self):
@@ -633,16 +658,6 @@ class FrontendClient:
     
     def handle_csv_tag(self,alias_list):
         self.alias_list = alias_list
-
-    # def handle_data_cnt(self,data_cnt):
-    #     self.data_cnt = data_cnt
-    #     self.img_cache = []
-    #     self.img_error_msg = []
-    #     self.labeling_status = []
-    #     for i in range(0,data_cnt):
-    #         self.img_cache.append(None)
-    #         self.img_error_msg.append(None)
-    #         self.labeling_status.append(False)
     
     def handle_csv(self,csv_bytes):
         csv_str = csv_bytes.decode('utf-8')
