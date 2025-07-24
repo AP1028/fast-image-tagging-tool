@@ -54,64 +54,117 @@ class BackendServer:
         return
 
     def configure_setting(self,setting_data):
+        # host
         try:
             self.host = setting_data["host"]
         except KeyError:
             log_warn("Missing host in setting, using 0.0.0.0 as default")
             self.host = "0.0.0.0"
+        
+        # port
         try:
             self.port = setting_data["port"]
         except KeyError:
             log_warn("Missing port in setting, using 52973 as default")
             self.port = 52973
+        
+        # get input csv dir/path
         try:
             self.csv_dir = setting_data["csv_dir"] # placeholder as folder
             self.csv_path = setting_data["csv_dir"] # input csv file
         except KeyError:
-            log_warn("Missing csv_dir, using 'data' as default")
-            self.csv_dir = "data"
-            self.csv_path = "data"
-        try:
-            self.csv_save_dir = setting_data["csv_save_dir"]
-        except KeyError:
-            log_warn("Missing csv_save_dir, using 'data' as default")
-            self.csv_save_dir = "data"
+            log_error("Missing csv_dir!")
+            sys.exit()
+
+        # get tag csv path
         try:
             self.tag_path = setting_data["tag_path"]
         except KeyError:
-            log_warn("Missing tag_path, using 'tag.csv' as default")
-            self.tag_path = "tag.csv"
+            log_error("Missing tag_path!")
+            sys.exit()
+        
+        # check if write to same file
         try:
             self.output_to_same_file = setting_data["save_to_same_file"]
         except KeyError:
             log_warn("Missing multiple_selection in setting, using false as default")
             self.save_to_same_file = False
+        
+        # handle write dir
+        if self.output_to_same_file == False:
+            try:
+                self.csv_save_dir = setting_data["csv_save_dir"]
+                # get input csv file name
+                csv_filename = os.path.basename(self.csv_path)
+                csv_filename_noext, _ =os.path.splitext(csv_filename)
+                self.csv_save_path = f"{self.csv_save_dir}/{csv_filename_noext}__labelled__.csv"
 
+            except KeyError:
+                log_error("Missing csv_save_dir!")
+                sys.exit()
+        else:
+            self.csv_save_path = self.csv_path
+                    
+        write_status = self.is_writeable()
+        if write_status == False:
+            log_error('Error: Closing server due to cannot write to specified output file')
+            sys.exit()
+            
+    def is_writeable(self):
+        # create if does not exist
+        if os.path.isdir(self.csv_save_dir)==False:
+            try:
+                log_warn(f'{self.csv_save_dir} does not exist, creating')
+                os.mkdir(self.csv_save_dir)
+            except OSError as e:
+                log_error(f'Error: {self.csv_save_dir} cannot be created with error {e}')
+                return False
+            return True
+        # check if directory accessable
+        elif os.access(self.csv_save_dir, os.W_OK) == False:
+            log_error(f'Error: {self.csv_save_dir} is not writeable.')
+            return False
+        # check if path writable if exists
+        elif os.path.exists(self.csv_save_dir):
+            if os.path.isfile(self.csv_save_dir):
+                if os.access(self.csv_save_dir, os.W_OK):
+                    return True
+                else:
+                    log_error(f'Error: Permission denied writing to {self.csv_save_dir}')
+                    return False
+            else:
+                log_error(f'Error: {self.csv_save_dir} is a directory.')
+                return False
+    
 
     def handle_csv(self):
+        # handle data csv
         self.data_csv = pd.read_csv(self.csv_path)
-        self.tag_csv = pd.read_csv(self.tag_path)
-
-        self.data_list = self.data_csv.values.tolist()
-        self.data_cnt = len(self.data_list)
+        log_ok(f"Data CSV loaded with size of {len(self.data_csv)}")
         
         self.data_column_list = self.data_csv.columns.tolist()
-        self.tag_data_list = self.tag_csv.values.tolist()
-        self.tag_data_column_list = self.tag_csv.columns.tolist()
-        
-        # self.data_list[row][column]
-
-        log_info(f"Data CSV loaded with size of {len(self.data_csv)}")
-        log_info(f"Tag CSV loaded with size of {len(self.data_csv)}")
-        log_info(f"data_list loaded with size of {len(self.data_list)}")
-        log_info(f"tag_data_list loaded with size of {len(self.tag_data_list)}")
-        
         log_info(f"data_column_list: \n{self.data_column_list}")
+        
+        self.data_list = self.data_csv.values.tolist()
+        self.data_cnt = len(self.data_list)
+        log_ok(f"data_list loaded with size of {len(self.data_list)}")
+        
+        # handle tag csv
+        self.tag_csv = pd.read_csv(self.tag_path)
+        log_ok(f"Tag CSV loaded with size of {len(self.tag_csv)}")
+        
+        self.tag_data_column_list = self.tag_csv.columns.tolist()
         log_info(f"tag_data_column_list: \n{self.tag_data_column_list}")
+        
+        self.tag_data_list = self.tag_csv.values.tolist()
+        log_ok(f"tag_data_list loaded with size of {len(self.tag_data_list)}")
+        
+        # format: self.data_list[row][column]
 
-        self.get_tag_entry_code()
-        self.get_tag_entry_alias()
-        self.get_tag_entry_file_path()
+        self.get_tag_entry_code() 
+        self.get_tag_entry_alias() 
+        self.get_tag_entry_file_path() 
+        
         self.get_tag_code_and_entry_list()
         self.get_tag_column_alias()
     
@@ -141,9 +194,10 @@ class BackendServer:
         for entry in self.data_column_list:
             if entry.strip() == 'file_path':
                 self.tag_entry_file_path = cnt
-                log_info(f"Data CSV has column at {self.tag_entry_file_path} matching 'file_path'")
-                break
+                log_ok(f"Data CSV has column at {self.tag_entry_file_path} matching 'file_path'")
+                return
             cnt+=1
+        log_error(f"Data CSV has column at 'file_path'")
     
     def get_tag_code_and_entry_list(self):
         # get list of tags containing column location in data csv
@@ -159,10 +213,18 @@ class BackendServer:
             if entry.strip()[0:9] == 'tag_code_':
                 self.tag_code_list.append(int(entry.strip()[9:19]))
                 self.tag_column_entry.append(cnt)
-                log_info(f"Loaded tag code at column {cnt} with code {int(entry.strip()[9:19])}")
+                log_info(f"Found tag code at column {cnt} with code {int(entry.strip()[9:19])}")
             else:
                 self.non_tag_data_column_list.append(entry)
             cnt+=1
+            
+        if self.tag_code_list:
+            log_ok(f"Successfully extracted tag code list {self.tag_code_list}")
+        else:
+            log_error(f"Error: No column matching 'tag_code_' found.")
+            log_error(f"Check input CSV data.")
+            sys.exit(1)
+            
         # get total tag cnt
         self.tag_cnt = len(self.tag_column_entry)
     
@@ -177,23 +239,33 @@ class BackendServer:
                 if tag_code == self.tag_data_list[i][self.tag_entry_code]:
                     alias = self.tag_data_list[i][self.tag_entry_alias]
                     break
+            if alias == f"{tag_code}_fallback":
+                log_warn(f'No alias found for tag code {tag_code}. Using {alias} as fallback.')
+            else:
+                log_info(f"Found alias {alias}")
             self.tag_column_alias.append(alias)
-            log_info(f"Found alias {alias}")
+            
+        if self.tag_column_alias:
+            log_ok(f"Successfully extracted alias list {self.tag_column_alias}")
+        else:
+            log_error(f'Error: alias list empty.')
+            log_error(f'You are not supposed to see this as you should have exited in self.get_tag_code_and_entry_list()')
+            sys.exit(1)
+        
         
     def save_csv(self):
         df = pd.DataFrame(self.data_list, columns=self.data_column_list)
-        if self.save_to_same_file == True:
-             df.to_csv(self.csv_path, index=False)
-             log_info(f"File saved to: {self.csv_path}")
-        
+
+        if self.is_writeable() == True:
+            df.to_csv(f"{self.csv_save_path}", index=False)
+            log_ok(f"File saved to: {self.csv_save_path}")
+            return True
         else:
-            if os.path.isdir(self.csv_save_dir)==False:
-                os.mkdir(self.csv_save_dir)
-            csv_filename = os.path.basename(self.csv_path)
-            csv_filename_noext, _ =os.path.splitext(csv_filename)
-            csv_save_filename = f"{csv_filename_noext}__labelled__.csv"
-            df.to_csv(f"{self.csv_save_dir}/{csv_save_filename}", index=False)
-            log_info(f"File saved to: {self.csv_save_dir}/{csv_save_filename}")
+            log_warn('You break something and now the server cannot write to the specified output file.')
+            log_warn('The server will not stop, but you probably want to resolve this if you don\'t want to lose your work.')
+            log_warn('Retry saving once you resolved the problem.')
+            return False
+            
     
     def start(self):
         self.handle_csv()
@@ -270,16 +342,17 @@ class BackendServer:
                         csv_data_slice.append(status)
                     
                     log_network(f'Received request for CSV change, from index {index1} to {index2}')
-                    
                     self.update_tag(conn, index1, index2, csv_data_slice)
-
                     conn.sendall(b'\xff\x03\x00')  
 
                 elif cmd == 0x04:  # save
                     log_network('Received request saving')
-                    self.save_csv()
-                    # change complete
-                    conn.sendall(b'\xff\x04\x00')  
+                    
+                    # save
+                    if self.save_csv():
+                        conn.sendall(b'\xff\x04\x00')  
+                    else:
+                        conn.sendall(b'\xff\x04\x01')  
 
                 # elif cmd == 0x05:  # request data count
                 #     self.send_data_count(conn)
@@ -289,7 +362,7 @@ class BackendServer:
                     self.send_partial_csv(conn)
 
                 else:
-                    log_network(f"Unknown cmd byte {cmd}. Maybe check version?")
+                    log_warn(f"Unknown cmd byte {cmd}. Maybe check version?")
                     
         except ConnectionResetError:
             log_network(f"Client {addr} disconnected")

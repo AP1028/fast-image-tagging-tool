@@ -274,8 +274,6 @@ class FrontendClient:
             messagebox.showerror("Connection Error", 
                                 f"Unexpected error: {str(e)}")
             return False
-        
-        
             
     def is_connected(self):
         if self.sock is None: self.connected = False
@@ -311,11 +309,8 @@ class FrontendClient:
         if self.is_connected():
             log_info("Already connected, no need to reconnect")
             return
-
         self.close_sock()
-        
         self.connect_to_server(self.host, self.port)
-        
         if self.is_connected():
             log_ok("Reconnection successful")
     
@@ -340,17 +335,19 @@ class FrontendClient:
         # write to own csv
         # local data_list write
         log_info(f'selecting tag {tag_index}')
+        # false tag
         if tag_index == -1:
             for i in range(0,self.tag_cnt):
                 self.data_list[self.img_index][i] = False
+        # single selection
         elif self.multiple_selection==False:
             self.data_list[self.img_index][tag_index] = True
             for i in range(0,self.tag_cnt):
                 if i!=tag_index:
                     self.data_list[self.img_index][i] = False
+        # multiple selection
         else:
             self.data_list[self.img_index][tag_index] = not self.data_list[self.img_index][tag_index]
-
         self.request_csv_change(self.img_index,self.img_index,self.data_list[self.img_index])
         self.update_ui()
 
@@ -361,23 +358,11 @@ class FrontendClient:
     def next_image(self):
         if self.img_index < self.data_cnt - 1:
             self.goto_frame(self.img_index+1)
-    
-    # def jump_button_input(self):
-    #     user_input = self.index_jump_input.get()
-    #     try:
-    #         jump_index = int(user_input) - 1
-    #         if jump_index<self.data_cnt and jump_index>=0:
-    #             self.goto_frame(jump_index)
-    #         else:
-    #             return
-
-    #     except ValueError:
-    #         log_info('User input not a number')
 
     def on_slider_move(self,value):
-        # slider_value = self.slider.get()
         self.goto_frame(int(value)-1)
 
+    # wrapper for goto frame, update both image and ui
     def goto_frame(self,index):
         if index<self.data_cnt and index>=0:
             self.img_index = index
@@ -395,15 +380,14 @@ class FrontendClient:
             self.img_label.config(image='')
 
             self.img_label.config(
-            text=f"Image {self.img_index} out of bound!\n Contact developer",  # 错误信息
-            foreground="white",  # 文字颜色
-            background="gray",  # 背景颜色
-            font=("Arial", 24),  # 字体大小
-            anchor="center",  # 文字居中
-            justify="center"  # 多行文字居中
+            text=f"Image {self.img_index} out of bound!\n Contact developer.",  
+            foreground="white", 
+            background="gray",
+            font=("Arial", 24), 
+            anchor="center", 
+            justify="center"
             )
-            # 确保标签有足够大小显示文字
-            self.img_label.config(width=800, height=600)
+            # self.img_label.config(width=800, height=600)
 
         # image not in cache
         elif self.img_cache[self.img_index] == None:
@@ -415,14 +399,13 @@ class FrontendClient:
                 self.img_label.config(image='')
 
                 self.img_label.config(
-                text=f"Image {self.img_index+1} requested\n Waiting for server response",  # 错误信息
-                foreground="white",  # 文字颜色
-                background="gray",  # 背景颜色
-                font=("Arial", 12),  # 字体大小
-                anchor="center",  # 文字居中
-                justify="center"  # 多行文字居中
+                text=f"Image {self.img_index+1} requested\n Waiting for server response.", 
+                foreground="white", 
+                background="gray", 
+                font=("Arial", 12), 
+                anchor="center", 
+                justify="center"
                 )
-                # self.img_label.config(width=800, height=600)
 
             # image in cache
             else:
@@ -432,17 +415,17 @@ class FrontendClient:
                 error_msg = self.img_error_msg[self.img_index]
                 
                 self.img_label.config(
-                text=f"Remote server responded with the following error:\n {error_msg}",  # 错误信息
-                foreground="white",  # 文字颜色
-                background="gray",  # 背景颜色
-                font=("Arial", 12),  # 字体大小
+                text=f"Remote server responded with the following error:\n {error_msg}", 
+                foreground="white",
+                background="gray", 
+                font=("Arial", 12), 
                 wraplength=600,
-                anchor="center",  # 文字居中
-                justify="center"  # 多行文字居中
+                anchor="center", 
+                justify="center" 
                 )
         else:
             # process image with PIL
-            log_info(f"image {self.img_index} found in cache, printing...")
+            log_info(f"Image {self.img_index} found in cache, printing...")
             img_data = self.img_cache[self.img_index]
             image = Image.open(io.BytesIO(img_data))
             image.thumbnail((796, 448))  # adjust size
@@ -600,20 +583,23 @@ class FrontendClient:
                 elif cmd == 0x03:
                     data = self.safe_recv(1)
                     status = struct.unpack('>B',data)[0]
-                    log_network(f"csv change complete with status {status}")
+                    if status == 0x00:
+                        log_ok(f"CSV change complete.")
+                    else:
+                        log_warn(f"CSV change failed!")
+                        messagebox.showwarning("Server error", 
+                                  f"Server failed to change CSV data. Check server console.")
                     
                 # save completed
                 elif cmd == 0x04:  
                     data = self.safe_recv(1)
                     status = struct.unpack('>B',data)[0]
-                    log_network(f"save complete with status {status}")
-                
-                # ask for data size
-                # elif cmd == 0x05:  
-                #     log_network("receiving data size")
-                #     data = self.sock.recv(5)
-                #     status, data_cnt = struct.unpack('>BI',data)
-                #     self.handle_data_cnt(data_cnt)
+                    if status == 0x00:
+                        log_ok(f"Save complete.")
+                    else:
+                        log_warn(f"Save failed!")
+                        messagebox.showwarning("Server error", 
+                                  f"Server failed to save the csv file. Check server console.")
                 
                 elif cmd == 0x06:  
                     log_network("receiving csv data")
@@ -635,7 +621,8 @@ class FrontendClient:
                         pass
 
                 else:
-                    log_network(f"Unknown cmd byte {cmd}. Maybe check version?")
+                    log_warn(f"Unknown cmd byte {cmd}. Maybe check version?")
+                    
         except ConnectionResetError:
             log_network("Connection reset by server")
             self.connected = False
