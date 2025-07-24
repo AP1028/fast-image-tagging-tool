@@ -1,3 +1,4 @@
+import sys
 import time
 import tkinter as tk
 from tkinter import ttk, messagebox
@@ -51,7 +52,8 @@ class FrontendClient:
 
         # initialization (this is temporarily)
         self.load_setting_file(setting_path)
-        self.connect_to_server(self.host,self.port)
+        status = self.connect_to_server(self.host,self.port)
+        if status == False: sys.exit(1)
 
         # request necessary data
         # self.request_data_cnt()
@@ -237,16 +239,16 @@ class FrontendClient:
         self.root.bind('F', self.keyboard_event)
         self.root.bind('f', self.keyboard_event)
 
-        # input section
-        # may change to sub window
-        self.input_frame = ttk.Frame(self.root, padding=10)
-        self.input_frame.pack(fill=tk.X)
+        # # input section
+        # # may change to sub window
+        # self.input_frame = ttk.Frame(self.root, padding=10)
+        # self.input_frame.pack(fill=tk.X)
 
-        self.index_jump_input = tk.Entry(self.input_frame)
-        self.index_jump_input.pack(pady=10)
+        # self.index_jump_input = tk.Entry(self.input_frame)
+        # self.index_jump_input.pack(pady=10)
 
-        self.jump_button = tk.Button(self.input_frame, text="Jump", command=self.jump_button_input)
-        self.jump_button.pack()
+        # self.jump_button = tk.Button(self.input_frame, text="Jump", command=self.jump_button_input)
+        # self.jump_button.pack()
 
         log_ok('GUI building successful')
     
@@ -258,16 +260,22 @@ class FrontendClient:
             self.sock.connect((host, port))
             self.connected = True
             threading.Thread(target=self.receive_data, daemon=True).start()
-            # self.request_csv()
+            return True
+
         except (ConnectionRefusedError,socket.timeout) as e:
             log_error(f"Connection failed: {str(e)}")
             messagebox.showwarning("Connection Error", 
                                   f"Failed to connect to server at {host}:{port}\n{str(e)}")
+            return False
+            
         except Exception as e:
             self.connected = False
             log_error(f"Unexpected connection error: {str(e)}")
             messagebox.showerror("Connection Error", 
                                 f"Unexpected error: {str(e)}")
+            return False
+        
+        
             
     def is_connected(self):
         if self.sock is None: self.connected = False
@@ -354,17 +362,17 @@ class FrontendClient:
         if self.img_index < self.data_cnt - 1:
             self.goto_frame(self.img_index+1)
     
-    def jump_button_input(self):
-        user_input = self.index_jump_input.get()
-        try:
-            jump_index = int(user_input) - 1
-            if jump_index<self.data_cnt and jump_index>=0:
-                self.goto_frame(jump_index)
-            else:
-                return
+    # def jump_button_input(self):
+    #     user_input = self.index_jump_input.get()
+    #     try:
+    #         jump_index = int(user_input) - 1
+    #         if jump_index<self.data_cnt and jump_index>=0:
+    #             self.goto_frame(jump_index)
+    #         else:
+    #             return
 
-        except ValueError:
-            log_info('User input not a number')
+    #     except ValueError:
+    #         log_info('User input not a number')
 
     def on_slider_move(self,value):
         # slider_value = self.slider.get()
