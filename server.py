@@ -91,7 +91,7 @@ class BackendServer:
             self.save_to_same_file = False
         
         # handle write dir
-        if self.output_to_same_file == False:
+        if self.save_to_same_file == False:
             try:
                 self.csv_save_dir = setting_data["csv_save_dir"]
                 # get input csv file name
