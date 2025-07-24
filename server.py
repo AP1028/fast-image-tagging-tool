@@ -112,7 +112,7 @@ class BackendServer:
             
     def is_writeable(self):
         # create if does not exist
-        if os.path.isdir(self.csv_save_dir)==False:
+        if os.path.exists(self.csv_save_dir)==False:
             try:
                 log_warn(f'{self.csv_save_dir} does not exist, creating')
                 os.mkdir(self.csv_save_dir)
@@ -120,17 +120,17 @@ class BackendServer:
                 log_error(f'Error: {self.csv_save_dir} cannot be created with error {e}')
                 return False
             return True
-        # check if directory accessable
+        # dir exists, check if directory accessable
         elif os.access(self.csv_save_dir, os.W_OK) == False:
             log_error(f'Error: {self.csv_save_dir} is not writeable.')
             return False
-        # check if path writable if exists
-        elif os.path.exists(self.csv_save_dir):
-            if os.path.isfile(self.csv_save_dir):
-                if os.access(self.csv_save_dir, os.W_OK):
+        # dir exists and accessable, check if file writable if exists
+        elif os.path.exists(self.csv_save_path):
+            if os.path.isfile(self.csv_save_path):
+                if os.access(self.csv_save_path, os.W_OK):
                     return True
                 else:
-                    log_error(f'Error: Permission denied writing to {self.csv_save_dir}')
+                    log_error(f'Error: Permission denied writing to {self.csv_save_path}')
                     return False
             else:
                 log_error(f'Error: {self.csv_save_dir} is a directory.')
