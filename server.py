@@ -104,7 +104,7 @@ class BackendServer:
                 sys.exit()
         else:
             self.csv_save_path = self.csv_path
-            self.csv_save_dir = os.path.dirname(self.csv_path)
+            self.csv_save_dir = os.path.dirname(self.csv_path) or '.'
                     
         write_status = self.is_writeable()
         if write_status == False:
