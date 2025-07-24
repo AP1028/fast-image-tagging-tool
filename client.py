@@ -136,7 +136,7 @@ class FrontendClient:
             log_warn('Resend request for self.tag_cnt and self.data_cnt to be loaded.')
             self.request_csv_tag_info()
             self.request_csv_data()
-            time.sleep(0.1)
+            time.sleep(0.5)
         
         log_ok(f'successfully loaded self.tag_cnt={self.tag_cnt} and self.data_cnt={self.data_cnt}')
 

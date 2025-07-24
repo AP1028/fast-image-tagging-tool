@@ -116,10 +116,10 @@ class BackendServer:
             try:
                 log_warn(f'{self.csv_save_dir} does not exist, creating')
                 os.mkdir(self.csv_save_dir)
+                return True
             except OSError as e:
                 log_error(f'Error: {self.csv_save_dir} cannot be created with error {e}')
                 return False
-            return True
         # dir exists, check if directory accessable
         elif os.access(self.csv_save_dir, os.W_OK) == False:
             log_error(f'Error: {self.csv_save_dir} is not writeable.')
@@ -135,6 +135,8 @@ class BackendServer:
             else:
                 log_error(f'Error: {self.csv_save_dir} is a directory.')
                 return False
+        else:
+            return True
     
 
     def handle_csv(self):
