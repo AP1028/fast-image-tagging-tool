@@ -66,7 +66,7 @@ class BackendServer:
             self.port = 52973
         try:
             self.csv_dir = setting_data["csv_dir"] # placeholder as folder
-            self.csv_path = setting_data["csv_dir"] # placeholder as file
+            self.csv_path = setting_data["csv_dir"] # input csv file
         except KeyError:
             log_warn("Missing csv_dir, using 'data' as default")
             self.csv_dir = "data"
@@ -114,14 +114,6 @@ class BackendServer:
         self.get_tag_entry_file_path()
         self.get_tag_code_and_entry_list()
         self.get_tag_column_alias()
-        
-        # search matching tag code in 'code' entry in tag csv list 
-        # and record the alias
-        
-        
-        # get total tag cnt
-        
-        
     
     def get_tag_entry_code(self):
         # get tag code entry
@@ -171,9 +163,12 @@ class BackendServer:
             else:
                 self.non_tag_data_column_list.append(entry)
             cnt+=1
+        # get total tag cnt
         self.tag_cnt = len(self.tag_column_entry)
     
     def get_tag_column_alias(self):
+        # search matching tag code in 'code' entry in tag csv list 
+        # and record the alias
         self.tag_column_alias=[]
         log_info("Checking tag code list for alias name")
         for tag_code in self.tag_code_list:
