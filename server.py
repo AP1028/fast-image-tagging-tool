@@ -12,6 +12,7 @@ default_setting = {
         "csv_dir": "data", # csv data folder
         "csv_save_dir": "data", # csv data save folder
         "tag_path": "tag.csv", # tag file location
+        "save_to_same_file": False
     }
 
 def log_network(str):
@@ -38,18 +39,18 @@ class BackendServer:
                 return
         # Error handing
         except FileNotFoundError:
-            log_warn(f"'{setting_path}' not found.")
+            log_error(f"'{setting_path}' not found.")
             log_info(f"Writing default setting to '{setting_path}'.")
             try:
                 with open(setting_path, 'w') as setting_file: # 'w' for write mode (overwrites existing file)
                     json.dump(default_setting, setting_file, indent=4)
                 log_ok(f"Default setting written to {setting_path} successfully.")
             except IOError as error:
-                log_warn(f"An error occurred while writing to {setting_path}: {error}")
+                log_error(f"An error occurred while writing to {setting_path}: {error}")
         except json.JSONDecodeError:
-            log_warn(f"Invalid JSON format in '{setting_path}'.")
-        log_info("Using default setting.")
-        self.configure_setting(default_setting)
+            log_error(f"Invalid JSON format in '{setting_path}'.")
+        log_error(f"Server stopped due to problem with settings.")
+        sys.exit(1)
         return
 
     def configure_setting(self,setting_data):
@@ -64,10 +65,12 @@ class BackendServer:
             log_warn("Missing port in setting, using 52973 as default")
             self.port = 52973
         try:
-            self.csv_dir = setting_data["csv_dir"]
+            self.csv_dir = setting_data["csv_dir"] # placeholder as folder
+            self.csv_path = setting_data["csv_dir"] # placeholder as file
         except KeyError:
             log_warn("Missing csv_dir, using 'data' as default")
             self.csv_dir = "data"
+            self.csv_path = "data"
         try:
             self.csv_save_dir = setting_data["csv_save_dir"]
         except KeyError:
@@ -78,13 +81,15 @@ class BackendServer:
         except KeyError:
             log_warn("Missing tag_path, using 'tag.csv' as default")
             self.tag_path = "tag.csv"
-
-    
-    
+        try:
+            self.output_to_same_file = setting_data["save_to_same_file"]
+        except KeyError:
+            log_warn("Missing multiple_selection in setting, using false as default")
+            self.save_to_same_file = False
 
 
     def handle_csv(self):
-        self.data_csv = pd.read_csv(self.csv_dir)
+        self.data_csv = pd.read_csv(self.csv_path)
         self.tag_csv = pd.read_csv(self.tag_path)
 
         self.data_list = self.data_csv.values.tolist()
@@ -164,11 +169,18 @@ class BackendServer:
 
     def save_csv(self):
         df = pd.DataFrame(self.data_list, columns=self.data_column_list)
-        if os.path.isdir(self.csv_save_dir)==False:
-            os.mkdir(self.csv_save_dir)
-            
-        df.to_csv(f"{self.csv_save_dir}/labeled_{self.csv_dir}", index=False)
-        log_info(f"File saved to: {self.csv_save_dir}/labeled_{self.csv_dir}")
+        if self.save_to_same_file == True:
+             df.to_csv(self.csv_path, index=False)
+             log_info(f"File saved to: {self.csv_path}")
+        
+        else:
+            if os.path.isdir(self.csv_save_dir)==False:
+                os.mkdir(self.csv_save_dir)
+            csv_filename = os.path.basename(self.csv_path)
+            csv_filename_noext, _ =os.path.splitext(csv_filename)
+            csv_save_filename = f"{csv_filename_noext}__labelled__.csv"
+            df.to_csv(f"{self.csv_save_dir}/{csv_save_filename}", index=False)
+            log_info(f"File saved to: {self.csv_save_dir}/{csv_save_filename}")
     
     def start(self):
         self.handle_csv()

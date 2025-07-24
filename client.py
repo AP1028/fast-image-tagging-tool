@@ -16,7 +16,7 @@ default_setting = {
         "host": "127.0.0.1", # socket bind ip address
         "port": 52973, # socket bind port
         "multiple_selection": False,
-        "always_save": True
+        "always_save": True,
     }
 
 def log_network(str):
@@ -89,18 +89,19 @@ class FrontendClient:
                 return
          # Error handing
         except FileNotFoundError:
-            log_warn(f"'{setting_path}' not found.")
+            log_error(f"'{setting_path}' not found.")
             log_info(f"Writing default setting to '{setting_path}'.")
             try:
                 with open(setting_path, 'w') as setting_file: # 'w' for write mode (overwrites existing file)
                     json.dump(default_setting, setting_file, indent=4)
                 log_ok(f"Default setting written to {setting_path} successfully.")
             except IOError as error:
-                log_warn(f"An error occurred while writing to {setting_path}: {error}")
+                log_error(f"An error occurred while writing to {setting_path}: {error}")
         except json.JSONDecodeError:
-            log_warn(f"Error: Invalid JSON format in '{setting_path}'.")
-        log_info("Using default setting.")
-        self.configure_setting(default_setting)
+            log_error(f"Error: Invalid JSON format in '{setting_path}'.")
+        
+        log_error(f"Client stopped due to problem with settings.")
+        sys.exit(1)
         return
     
     def configure_setting(self,setting_data):
@@ -138,7 +139,6 @@ class FrontendClient:
             time.sleep(0.1)
         
         log_ok(f'successfully loaded self.tag_cnt={self.tag_cnt} and self.data_cnt={self.data_cnt}')
-
 
         # init
         self.root = tk.Tk()
