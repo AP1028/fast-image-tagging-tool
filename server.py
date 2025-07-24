@@ -85,7 +85,7 @@ class BackendServer:
         
         # check if write to same file
         try:
-            self.output_to_same_file = setting_data["save_to_same_file"]
+            self.save_to_same_file = setting_data["save_to_same_file"]
         except KeyError:
             log_warn("Missing multiple_selection in setting, using false as default")
             self.save_to_same_file = False
