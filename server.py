@@ -188,7 +188,7 @@ class BackendServer:
                 )
                 client_thread.start()
 
-    def recv_all(self,conn,size):
+    def safe_recv(self,conn,size):
         conn.settimeout(30.0)
         data = bytearray()
         while len(data) < size:
@@ -214,11 +214,11 @@ class BackendServer:
                         continue
                 
                 log_network("Header matched, reading socket message")
-                cmd = struct.unpack('B', self.recv_all(conn,1))[0]
+                cmd = struct.unpack('B', self.safe_recv(conn,1))[0]
                 
                 # request image
                 if cmd == 0x01: 
-                    data = self.recv_all(conn,4)
+                    data = self.safe_recv(conn,4)
                     index= struct.unpack('>I', data)[0]
 
                     log_network(f'Received request for image {index}')
@@ -231,12 +231,12 @@ class BackendServer:
                     self._send_tag(conn)
                     
                 elif cmd == 0x03:  # request csv change
-                    data = self.recv_all(conn,12)
+                    data = self.safe_recv(conn,12)
                     csv_data_slice = []
                     index1, index2, tag_index_cnt = struct.unpack('>III', data)
                     
                     for i in range (0,tag_index_cnt):
-                        byte = self.recv_all(conn,1)
+                        byte = self.safe_recv(conn,1)
                         if byte == b'\x01':
                             status = True
                         else:
