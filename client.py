@@ -513,6 +513,8 @@ class FrontendClient:
                 data.extend(packet)
             except socket.timeout:
                 log_error(f"Timeout, expected length: {size}, received: {len(data)}")
+                messagebox.showwarning("Connection error", 
+                        f"Timeout, expected length: {size}, received: {len(data)}")
         return bytes(data)
 
     def receive_data(self):
@@ -530,107 +532,38 @@ class FrontendClient:
                 
                 log_network("Header matched, reading socket message")
                 cmd = struct.unpack('B', self.safe_recv(1))[0]
-                
                 # receive image
                 if cmd == 0x01: 
-                    data = self.safe_recv(5)
-                    status, index = struct.unpack('>BI', data)
-                    # read data through chunk
-                    if status == 0x00:
-                        # unset failed state
-                        self.img_error_msg[index] = None
-
-                        data = self.safe_recv(4)
-                        img_size = struct.unpack('>I', data)[0]
-                        received = 0
-                        img_data = b''
-                        while received < img_size:
-                            # 4kb per chunk
-                            chunk = self.safe_recv(min(4096, img_size - received))
-                            if not chunk:
-                                raise ConnectionError("Connection closed early")
-                            img_data += chunk
-                            received += len(chunk)
-                        self.handle_image(index,img_data)
-                        log_network(f"Received image {index}")
-                    else:
-                        log_network("Server respond with error with image")
-                        data = self.safe_recv(4)
-                        error_size = struct.unpack('>I', data)[0]
-                        data = self.safe_recv(error_size)
-                        error_msg = data.decode('utf-8')
-                        log_network(f"Error received: {error_msg}")
-                        self.img_error_msg[index] = error_msg
-
-                        if self.img_index == index:
-                            self.init_frame()
-                
+                    self.receive_image()
                 # receive csv tag
                 elif cmd == 0x02:  
-                    data = self.safe_recv(5)
-                    status, self.tag_cnt = struct.unpack('>BI',data)
-                    alias_list = []
-                    for i in range(0,self.tag_cnt):
-                        data =  self.safe_recv(4)
-                        alias_size = struct.unpack('>I', data)[0]
-                        alias_bytes =  self.safe_recv(alias_size)
-                        alias = alias_bytes.decode('utf-8')
-                        alias_list.append(alias)
-                    log_network("Receive csv tag")
-                    self.handle_csv_tag(alias_list)
-                
+                    self.receive_csv_tag()
                 # CSV change completed
                 elif cmd == 0x03:
-                    data = self.safe_recv(1)
-                    status = struct.unpack('>B',data)[0]
-                    if status == 0x00:
-                        log_ok(f"CSV change complete.")
-                    else:
-                        log_warn(f"CSV change failed!")
-                        messagebox.showwarning("Server error", 
-                                  f"Server failed to change CSV data. Check server console.")
-                    
+                    self.receive_csv_change_msg()
                 # save completed
                 elif cmd == 0x04:  
-                    data = self.safe_recv(1)
-                    status = struct.unpack('>B',data)[0]
-                    if status == 0x00:
-                        log_ok(f"Save complete.")
-                    else:
-                        log_warn(f"Save failed!")
-                        messagebox.showwarning("Server error", 
-                                  f"Server failed to save the csv file. Check server console.")
-                
+                    self.receive_csv_save_msg()
+                # receive csv data
                 elif cmd == 0x06:  
-                    log_network("receiving csv data")
-                    data = self.safe_recv(5)
-                    status, csv_size = struct.unpack('>BI', data)
-                    # read data through chunk
-                    if status == 0x00:
-                        received = 0
-                        csv_bytes = b''
-                        while received < csv_size:
-                            # 4kb per chunk
-                            chunk = self.safe_recv(min(4096, csv_size - received))
-                            if not chunk:
-                                raise ConnectionError("Connection closed early")
-                            csv_bytes += chunk
-                            received += len(chunk)
-                        self.handle_csv(csv_bytes)
-                    else:
-                        pass
-
+                    self.receive_csv_data()
                 else:
                     log_warn(f"Unknown cmd byte {cmd}. Maybe check version?")
                     
         except ConnectionResetError:
-            log_network("Connection reset by server")
+            log_error("Connection reset by server")
+            messagebox.showwarning("Connection error", 
+                        f"Connection reset by server")
             self.connected = False
         except socket.timeout:
-            log_network("Socket timeout, connection may be lost")
+            log_error("Socket timeout, connection may be lost")
+            messagebox.showwarning("Connection error", 
+                        f"Socket timeout, connection may be lost")
             self.connected = False
         except Exception as e:
-            log_network(f"Unexpected error in receive_data: {str(e)}")
+            log_error(f"Unexpected error in receive_data: {str(e)}")
+            messagebox.showwarning("Connection error", 
+                        f"Unexpected error in receive_data: {str(e)}")
             self.connected = False
         finally:
             if self.sock:
@@ -639,6 +572,87 @@ class FrontendClient:
                 except:
                     pass
                 self.sock = None
+    
+    def receive_image(self):
+        data = self.safe_recv(5)
+        status, index = struct.unpack('>BI', data)
+        # read data through chunk
+        if status == 0x00:
+            # unset failed state
+            self.img_error_msg[index] = None
+
+            data = self.safe_recv(4)
+            img_size = struct.unpack('>I', data)[0]
+            received = 0
+            img_data = b''
+            while received < img_size:
+                # 4kb per chunk
+                chunk = self.safe_recv(min(4096, img_size - received))
+                if not chunk:
+                    log_warn('Connection closed early')
+                img_data += chunk
+                received += len(chunk)
+            self.handle_image(index,img_data)
+            log_network(f"Received image {index}")
+        else:
+            log_network("Server respond with error with image")
+            data = self.safe_recv(4)
+            error_size = struct.unpack('>I', data)[0]
+            data = self.safe_recv(error_size)
+            error_msg = data.decode('utf-8')
+            log_network(f"Error received: {error_msg}")
+            self.img_error_msg[index] = error_msg
+
+            if self.img_index == index:
+                self.init_frame()
+    def receive_csv_tag(self):
+        data = self.safe_recv(5)
+        status, self.tag_cnt = struct.unpack('>BI',data)
+        alias_list = []
+        for i in range(0,self.tag_cnt):
+            data =  self.safe_recv(4)
+            alias_size = struct.unpack('>I', data)[0]
+            alias_bytes =  self.safe_recv(alias_size)
+            alias = alias_bytes.decode('utf-8')
+            alias_list.append(alias)
+        log_network("Receive csv tag")
+        self.handle_csv_tag(alias_list)
+    def receive_csv_change_msg(self):
+        data = self.safe_recv(1)
+        status = struct.unpack('>B',data)[0]
+        if status == 0x00:
+            log_ok(f"CSV change complete.")
+        else:
+            log_warn(f"CSV change failed!")
+            messagebox.showwarning("Server error", 
+                        f"Server failed to change CSV data. Check server console.")
+    def receive_csv_save_msg(self):
+        data = self.safe_recv(1)
+        status = struct.unpack('>B',data)[0]
+        if status == 0x00:
+            log_ok(f"Save complete.")
+        else:
+            log_warn(f"Save failed!")
+            messagebox.showwarning("Server error", 
+                        f"Server failed to save the csv file. Check server console.")
+    def receive_csv_data(self):
+        log_network("receiving csv data")
+        data = self.safe_recv(5)
+        status, csv_size = struct.unpack('>BI', data)
+        # read data through chunk
+        if status == 0x00:
+            received = 0
+            csv_bytes = b''
+            while received < csv_size:
+                # 4kb per chunk
+                chunk = self.safe_recv(min(4096, csv_size - received))
+                if not chunk:
+                    log_warn('Connection closed early')
+                csv_bytes += chunk
+                received += len(chunk)
+            self.handle_csv(csv_bytes)
+        else:
+            pass
 
     def handle_image(self, index, img_data):
         if not img_data:
