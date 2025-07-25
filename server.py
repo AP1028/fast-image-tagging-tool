@@ -30,6 +30,24 @@ def log_info(str):
 def log_warn(str):
     print(f'[WARN] {str}')
 
+def close_sock(sock):
+    if sock:
+        try:
+            sock.close()
+        except:
+            pass
+        sock = None
+
+def safe_sendall(conn,data):
+    try:
+        conn.sendall(data)
+    except (socket.error, OSError) as e:
+        log_error(f"Error sending data: {str(e)}")
+        close_sock(conn)
+    except Exception as e:
+        log_error(f"Unexpected error sending data: {str(e)}")
+        close_sock(conn)
+
 class BackendServer:
     def load_setting_file(self,setting_path):
         try:
@@ -74,20 +92,20 @@ class BackendServer:
             self.csv_path = setting_data["csv_dir"] # input csv file
         except KeyError:
             log_error("Missing csv_dir!")
-            sys.exit()
+            sys.exit(1)
 
         # get tag csv path
         try:
             self.tag_path = setting_data["tag_path"]
         except KeyError:
             log_error("Missing tag_path!")
-            sys.exit()
+            sys.exit(1)
         
         # check if write to same file
         try:
             save_to_same_file_str = str(setting_data["save_to_same_file"])
             save_to_same_file_str = save_to_same_file_str.strip().lower()
-            if save_to_same_file_str == 'true': 
+            if save_to_same_file_str == 'true' or '1': 
                 self.save_to_same_file = True
             else:
                 self.save_to_same_file = False
@@ -145,7 +163,7 @@ class BackendServer:
             return True
     
 
-    def handle_csv(self):
+    def build_csv(self):
         # handle data csv
         self.data_csv = pd.read_csv(self.csv_path)
         log_ok(f"Data CSV loaded with size of {len(self.data_csv)}")
@@ -276,7 +294,7 @@ class BackendServer:
             
     
     def start(self):
-        self.handle_csv()
+        self.build_csv()
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             s.bind((self.host, self.port))
@@ -300,10 +318,10 @@ class BackendServer:
             try:
                 packet = conn.recv(size - len(data))
                 if not packet:
-                    log_network("Socket connection broken")
+                    log_warn("Socket connection broken")
                 data.extend(packet)
             except socket.timeout:
-                log_network(f"Timeout, expected length: {size}, received: {len(data)}")
+                log_warn(f"Timeout, expected length: {size}, received: {len(data)}")
         return bytes(data)
     
     def handle_client(self, conn, addr):
@@ -323,52 +341,16 @@ class BackendServer:
                 
                 # request image
                 if cmd == 0x01: 
-                    data = self.safe_recv(conn,4)
-                    index= struct.unpack('>I', data)[0]
-
-                    log_network(f'Received request for image {index}')
-
-                    self.send_image(conn, index)
-                
+                    self.handle_image_request(conn)
                 # request csv tag
                 elif cmd == 0x02:  
-                    log_network(f'Received request for CSV tag name')
-                    self.send_tag(conn)
-                    
+                    self.handle_image_request(conn)
                 elif cmd == 0x03:  # request csv change
-                    data = self.safe_recv(conn,12)
-                    csv_data_slice = []
-                    index1, index2, tag_index_cnt = struct.unpack('>III', data)
-                    
-                    for i in range (0,tag_index_cnt):
-                        byte = self.safe_recv(conn,1)
-                        if byte == b'\x01':
-                            status = True
-                        else:
-                            status = False
-                        
-                        csv_data_slice.append(status)
-                    
-                    log_network(f'Received request for CSV change, from index {index1} to {index2}')
-                    self.update_tag(conn, index1, index2, csv_data_slice)
-                    conn.sendall(b'\xff\x03\x00')  
-
+                    self.handle_csv_change_request(conn)
                 elif cmd == 0x04:  # save
-                    log_network('Received request saving')
-                    
-                    # save
-                    if self.save_csv():
-                        conn.sendall(b'\xff\x04\x00')  
-                    else:
-                        conn.sendall(b'\xff\x04\x01')  
-
-                # elif cmd == 0x05:  # request data count
-                #     self.send_data_count(conn)
-
+                    self.handle_save_request(conn)
                 elif cmd == 0x06:  # request partial csv data
-                    log_network('Received request for partial CSV data')
-                    self.send_partial_csv(conn)
-
+                    self.handle_partial_csv_request(conn)
                 else:
                     log_warn(f"Unknown cmd byte {cmd}. Maybe check version?")
                     
@@ -376,6 +358,46 @@ class BackendServer:
             log_network(f"Client {addr} disconnected")
         finally:
             conn.close()
+
+    def handle_image_request(self,conn):
+        data = self.safe_recv(conn,4)
+        index= struct.unpack('>I', data)[0]
+        log_network(f'Received request for image {index}')
+        self.send_image(conn, index)
+
+    def handle_tag_request(self,conn):
+        log_network(f'Received request for CSV tag name')
+        self.send_tag(conn)
+    
+    def handle_csv_change_request(self,conn):
+        data = self.safe_recv(conn,12)
+        csv_data_slice = []
+        index1, index2, tag_index_cnt = struct.unpack('>III', data)
+        
+        for i in range (0,tag_index_cnt):
+            byte = self.safe_recv(conn,1)
+            if byte == b'\x01':
+                status = True
+            else:
+                status = False
+            
+            csv_data_slice.append(status)
+        
+        log_network(f'Received request for CSV change, from index {index1} to {index2}')
+        self.update_tag(conn, index1, index2, csv_data_slice)
+        safe_sendall(conn,b'\xff\x03\x00')
+    
+    def handle_save_request(self,conn):
+        log_network('Received request saving')  
+        # save
+        if self.save_csv():
+            safe_sendall(conn,b'\xff\x04\x00')  
+        else:
+            safe_sendall(conn,b'\xff\x04\x01')  
+    
+    def handle_partial_csv_request(self,conn):
+        log_network('Received request for partial CSV data')
+        self.send_partial_csv(conn)
 
     def send_image(self, conn, index):
         # server will send image from index1 to index2
@@ -392,10 +414,10 @@ class BackendServer:
             
             image_size = len(image_data)
             log_network(f"Sending image with size {image_size}")
-            conn.sendall(b'\xFF\x01\x00')
-            conn.sendall(struct.pack('>I', index))
-            conn.sendall(struct.pack('>I', image_size))
-            conn.sendall(image_data)
+            safe_sendall(conn,b'\xFF\x01\x00')
+            safe_sendall(conn,struct.pack('>I', index))
+            safe_sendall(conn,struct.pack('>I', image_size))
+            safe_sendall(conn,image_data)
             log_network(f"Sending complete")
         
         except IOError as error:
@@ -404,21 +426,21 @@ class BackendServer:
             error_bytes = error_str.encode('utf-8')
             error_size = len(error_bytes)
 
-            conn.sendall(b'\xFF\x01\x01')
-            conn.sendall(struct.pack('>I', index))
-            conn.sendall(struct.pack('>I', error_size))
-            conn.sendall(error_bytes)            
+            safe_sendall(conn,b'\xFF\x01\x01')
+            safe_sendall(conn,struct.pack('>I', index))
+            safe_sendall(conn,struct.pack('>I', error_size))
+            safe_sendall(conn,error_bytes)            
 
     def send_tag(self, conn):
         # send csv tag encoded
         log_info(f'Need to send {self.tag_column_alias}')
-        conn.sendall(b'\xff\x02\x00')
-        conn.sendall(struct.pack('>I', self.tag_cnt))
+        safe_sendall(conn,b'\xff\x02\x00')
+        safe_sendall(conn,struct.pack('>I', self.tag_cnt))
         for alias in self.tag_column_alias:
             alias_bytes = alias.encode('utf-8')
             alias_size = len(alias_bytes)
-            conn.sendall(struct.pack('>I', alias_size))
-            conn.sendall(alias_bytes)  
+            safe_sendall(conn,struct.pack('>I', alias_size))
+            safe_sendall(conn,alias_bytes)  
 
     def update_tag(self, conn, index1, index2, csv_data_slice):
         # update tag in csv database, from index1 to index2
@@ -444,9 +466,9 @@ class BackendServer:
         self.partial_csv_bytes = partial_csv_str.encode('utf-8')
         self.partial_csv_bytes_length = len(self.partial_csv_bytes)
 
-        conn.sendall(b'\xff\x06\x00')
-        conn.sendall(struct.pack('>I', self.partial_csv_bytes_length))
-        conn.sendall(self.partial_csv_bytes)
+        safe_sendall(conn,b'\xff\x06\x00')
+        safe_sendall(conn,struct.pack('>I', self.partial_csv_bytes_length))
+        safe_sendall(conn,self.partial_csv_bytes)
 
     def __init__(self, setting_path='server_setting.json'):
         self.load_setting_file(setting_path)
