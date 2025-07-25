@@ -18,21 +18,31 @@ default_setting = {
         "multiple_selection": False,
         "always_save": True,
     }
+class bcolors:
+    HEADER = '\033[95m'
+    OKBLUE = '\033[94m'
+    OKCYAN = '\033[96m'
+    OKGREEN = '\033[92m'
+    WARNING = '\033[93m'
+    FAIL = '\033[91m'
+    ENDC = '\033[0m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'
 
 def log_network(str):
-    print(f'[SOCK] {str}')
+    print(f'[{bcolors.OKCYAN}SOCK{bcolors.ENDC}] {str}')
 
 def log_ok(str):
-    print(f'[ OK ] {str}')
+    print(f'[{bcolors.OKGREEN} OK {bcolors.ENDC}] {str}')
 
 def log_error(str):
-    print(f'[FAIL] {str}')
+    print(f'[{bcolors.FAIL}FAIL{bcolors.ENDC}] {str}')
 
 def log_info(str):
-    print(f'[INFO] {str}')
+    print(f'[{bcolors.OKBLUE}INFO{bcolors.ENDC}] {str}')
 
 def log_warn(str):
-    print(f'[WARN] {str}')
+    print(f'[{bcolors.WARNING}WARN{bcolors.ENDC}] {str}')
 
 class FrontendClient:
     def __init__(self,setting_path='client_setting.json'):
@@ -597,12 +607,12 @@ class FrontendClient:
             self.handle_image(index,img_data)
             log_network(f"Received image {index}")
         else:
-            log_network("Server respond with error with image")
+            log_warn(f"Server respond with error with image {index}")
             data = self.safe_recv(4)
             error_size = struct.unpack('>I', data)[0]
             data = self.safe_recv(error_size)
             error_msg = data.decode('utf-8')
-            log_network(f"Error received: {error_msg}")
+            log_warn(f"Error received: {error_msg}")
             self.img_error_msg[index] = error_msg
 
             if self.img_index == index:

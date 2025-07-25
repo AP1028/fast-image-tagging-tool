@@ -14,21 +14,31 @@ default_setting = {
         "tag_path": "tag.csv", # tag file location
         "save_to_same_file": False
     }
+class bcolors:
+    HEADER = '\033[95m'
+    OKBLUE = '\033[94m'
+    OKCYAN = '\033[96m'
+    OKGREEN = '\033[92m'
+    WARNING = '\033[93m'
+    FAIL = '\033[91m'
+    ENDC = '\033[0m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'
 
 def log_network(str):
-    print(f'[SOCK] {str}')
+    print(f'[{bcolors.OKCYAN}SOCK{bcolors.ENDC}] {str}')
 
 def log_ok(str):
-    print(f'[ OK ] {str}')
+    print(f'[{bcolors.OKGREEN} OK {bcolors.ENDC}] {str}')
 
 def log_error(str):
-    print(f'[FAIL] {str}')
+    print(f'[{bcolors.FAIL}FAIL{bcolors.ENDC}] {str}')
 
 def log_info(str):
-    print(f'[INFO] {str}')
+    print(f'[{bcolors.OKBLUE}INFO{bcolors.ENDC}] {str}')
 
 def log_warn(str):
-    print(f'[WARN] {str}')
+    print(f'[{bcolors.WARNING}WARN{bcolors.ENDC}] {str}')
 
 def close_sock(sock):
     if sock:
@@ -169,7 +179,8 @@ class BackendServer:
         log_ok(f"Data CSV loaded with size of {len(self.data_csv)}")
         
         self.data_column_list = self.data_csv.columns.tolist()
-        log_info(f"data_column_list: \n{self.data_column_list}")
+        log_info(f"data_column_list:")
+        log_info(f"{self.data_column_list}")
         
         self.data_list = self.data_csv.values.tolist()
         self.data_cnt = len(self.data_list)
@@ -180,7 +191,8 @@ class BackendServer:
         log_ok(f"Tag CSV loaded with size of {len(self.tag_csv)}")
         
         self.tag_data_column_list = self.tag_csv.columns.tolist()
-        log_info(f"tag_data_column_list: \n{self.tag_data_column_list}")
+        log_info(f"tag_data_column_list:")
+        log_info(f"{self.tag_data_column_list}")
         
         self.tag_data_list = self.tag_csv.values.tolist()
         log_ok(f"tag_data_list loaded with size of {len(self.tag_data_list)}")
@@ -344,7 +356,7 @@ class BackendServer:
                     self.handle_image_request(conn)
                 # request csv tag
                 elif cmd == 0x02:  
-                    self.handle_image_request(conn)
+                    self.handle_tag_request(conn)
                 elif cmd == 0x03:  # request csv change
                     self.handle_csv_change_request(conn)
                 elif cmd == 0x04:  # save
@@ -361,7 +373,7 @@ class BackendServer:
 
     def handle_image_request(self,conn):
         data = self.safe_recv(conn,4)
-        index= struct.unpack('>I', data)[0]
+        index = struct.unpack('>I', data)[0]
         log_network(f'Received request for image {index}')
         self.send_image(conn, index)
 
@@ -413,7 +425,7 @@ class BackendServer:
                 image_data = f.read()
             
             image_size = len(image_data)
-            log_network(f"Sending image with size {image_size}")
+            log_network(f"Sending image of {image_size} bytes")
             safe_sendall(conn,b'\xFF\x01\x00')
             safe_sendall(conn,struct.pack('>I', index))
             safe_sendall(conn,struct.pack('>I', image_size))
@@ -421,7 +433,8 @@ class BackendServer:
             log_network(f"Sending complete")
         
         except IOError as error:
-            log_error("Image ioerror!")
+            log_warn(f"Warning: image {index} receive the following IO error:")
+            log_warn(f"{str(error)}")
             error_str = str(error)
             error_bytes = error_str.encode('utf-8')
             error_size = len(error_bytes)
