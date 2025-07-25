@@ -282,17 +282,23 @@ class FrontendClient:
     def safe_sendall(self,data):
         if not self.is_connected():
             log_error("Cannot send data: not connected to server")
+            messagebox.showerror("Connection Error", 
+                                "Cannot send data: not connected to server")
             return False
         try:
             self.sock.sendall(data)
             return True
         except (socket.error, OSError) as e:
             log_error(f"Error sending data: {str(e)}")
+            messagebox.showerror("Connection Error", 
+                                f"Error sending data: {str(e)}")
             self.connected = False
             self.close_sock()
             return False
         except Exception as e:
             log_error(f"Unexpected error sending data: {str(e)}")
+            messagebox.showerror("Connection Error", 
+                                f"Unexpected error sending data: {str(e)}")
             self.connected = False
             self.close_sock()
             return False
@@ -381,16 +387,11 @@ class FrontendClient:
 
             self.img_label.config(
             text=f"Image {self.img_index} out of bound!\n Contact developer.",  
-            foreground="white", 
-            background="gray",
-            font=("Arial", 24), 
-            anchor="center", 
-            justify="center"
+            foreground="white", background="gray",font=("Arial", 24), anchor="center", justify="center"
             )
-            # self.img_label.config(width=800, height=600)
-
         # image not in cache
         elif self.img_cache[self.img_index] == None:
+            # no error, still waiting
             if self.img_error_msg[self.img_index] == None:
                 log_info(f"Image {self.img_index} not found in cache, sending web request")
                 self.request_image(self.img_index)
@@ -400,14 +401,9 @@ class FrontendClient:
 
                 self.img_label.config(
                 text=f"Image {self.img_index+1} requested\n Waiting for server response.", 
-                foreground="white", 
-                background="gray", 
-                font=("Arial", 12), 
-                anchor="center", 
-                justify="center"
+                foreground="white", background="gray", font=("Arial", 12), anchor="center", justify="center"
                 )
-
-            # image in cache
+            # error, print error msg
             else:
                 self.img_label.image = None
                 self.img_label.config(image='')
@@ -416,15 +412,10 @@ class FrontendClient:
                 
                 self.img_label.config(
                 text=f"Remote server responded with the following error:\n {error_msg}", 
-                foreground="white",
-                background="gray", 
-                font=("Arial", 12), 
-                wraplength=600,
-                anchor="center", 
-                justify="center" 
+                foreground="white",background="gray", font=("Arial", 12), wraplength=600,anchor="center", justify="center" 
                 )
+        # image in cache, process and print image with PIL
         else:
-            # process image with PIL
             log_info(f"Image {self.img_index} found in cache, printing...")
             img_data = self.img_cache[self.img_index]
             image = Image.open(io.BytesIO(img_data))
@@ -468,12 +459,11 @@ class FrontendClient:
         for i in range(0,self.data_cnt):
             if self.img_cache[i] == None:
                 self.request_image(i)
-        
-    
+
     def request_csv_tag_info(self):
         log_network(f'Request csv tag')
         self.safe_sendall(b'\xff\x02')
-    
+
     def request_csv_change(self,index1,index2,write_list):
         log_network(f'Request csv change')
         log_network(f'List to send: {write_list}')
