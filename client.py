@@ -282,26 +282,19 @@ class FrontendClient:
     def safe_sendall(self,data):
         if not self.is_connected():
             log_error("Cannot send data: not connected to server")
-            messagebox.showerror("Connection Error", 
-                                "Cannot send data: not connected to server")
-            return False
+            raise RuntimeError("Cannot send data: not connected to server")
         try:
             self.sock.sendall(data)
-            return True
         except (socket.error, OSError) as e:
             log_error(f"Error sending data: {str(e)}")
-            messagebox.showerror("Connection Error", 
-                                f"Error sending data: {str(e)}")
             self.connected = False
             self.close_sock()
-            return False
+            raise RuntimeError(f"Error sending data: {str(e)}")
         except Exception as e:
             log_error(f"Unexpected error sending data: {str(e)}")
-            messagebox.showerror("Connection Error", 
-                                f"Unexpected error sending data: {str(e)}")
             self.connected = False
             self.close_sock()
-            return False
+            raise RuntimeError(f"Unexpected error sending data: {str(e)}")
     
     def close_sock(self):
         if self.sock:
@@ -443,16 +436,15 @@ class FrontendClient:
         self.slider.set(self.img_index+1)
 
         log_ok('UI status updated')
-
-    def request_image_multiple(self, index1, index2):
-        for i in range(index1, index2+1):
-            if self.img_cache == None:
-                self.request_image(i)
     
     def request_image(self, index):
         log_network(f'Request image {index}')
-        self.safe_sendall(b'\xff\x01')
-        self.safe_sendall(struct.pack('>I', index))
+        try:
+            self.safe_sendall(b'\xff\x01')
+            self.safe_sendall(struct.pack('>I', index))
+        except RuntimeError as e:
+            messagebox.showwarning("Connection error", 
+                        f"{e}")
 
     def request_all_image(self):
         log_info(f'Request all image')
@@ -462,35 +454,55 @@ class FrontendClient:
 
     def request_csv_tag_info(self):
         log_network(f'Request csv tag')
-        self.safe_sendall(b'\xff\x02')
+        try:
+            self.safe_sendall(b'\xff\x02')
+        except RuntimeError as e:
+            messagebox.showwarning("Connection error", 
+                        f"{e}")
 
     def request_csv_change(self,index1,index2,write_list):
         log_network(f'Request csv change')
         log_network(f'List to send: {write_list}')
-        self.safe_sendall(b'\xff\x03')
-        self.safe_sendall(struct.pack('>III', index1,index2, self.tag_cnt ))
-        for i in range(0,self.tag_cnt):
-            if write_list[i]:
-                self.safe_sendall(b'\x01')
-                log_info(f'Sending True for tag {i} {self.alias_list[i]}')
-            else:
-                self.safe_sendall(b'\x00')
-                log_info(f'Sending False for tag {i} {self.alias_list[i]}')
-        # autosave when writing
-        if(self.always_save):
-            self.request_save()
+        try:
+            self.safe_sendall(b'\xff\x03')
+            self.safe_sendall(struct.pack('>III', index1,index2, self.tag_cnt ))
+            for i in range(0,self.tag_cnt):
+                if write_list[i]:
+                    log_info(f'Sending True for tag {i} {self.alias_list[i]}')
+                    self.safe_sendall(b'\x01')
+                else:
+                    log_info(f'Sending False for tag {i} {self.alias_list[i]}')
+                    self.safe_sendall(b'\x00')
+            # autosave when writing
+            if(self.always_save):
+                self.request_save()
+        except RuntimeError as e:
+            messagebox.showwarning("Connection error", 
+                        f"{e}")
     
     def request_save(self):
         log_network(f'Request save')
-        self.safe_sendall(b'\xff\x04')
+        try:
+            self.safe_sendall(b'\xff\x04')
+        except RuntimeError as e:
+            messagebox.showwarning("Connection error", 
+                        f"{e}")
     
     def request_data_cnt(self):
         log_network(f'Request data cnt')
-        self.safe_sendall(b'\xff\x05')
+        try:
+            self.safe_sendall(b'\xff\x05')
+        except RuntimeError as e:
+            messagebox.showwarning("Connection error", 
+                        f"{e}")
     
     def request_csv_data(self):
         log_network(f'Request csv data')
-        self.safe_sendall(b'\xff\x06')
+        try:
+            self.safe_sendall(b'\xff\x06')
+        except RuntimeError as e:
+            messagebox.showwarning("Connection error", 
+                        f"{e}")
     
     def safe_recv(self,size):
         self.sock.settimeout(30.0)
