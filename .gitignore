@@ -212,3 +212,5 @@ __marimo__/
 image
 data
 test
+*.sh
+*.bat
