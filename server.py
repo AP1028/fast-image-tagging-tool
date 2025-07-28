@@ -335,6 +335,8 @@ class BackendServer:
             log_warn("multi_cam support not available")
             return
         
+        log_info(f'Found modality at column {self.tag_entry_cam}')
+        
         # modality found
         cam_dic = {}
         for i in range(0,self.data_cnt):
@@ -350,6 +352,8 @@ class BackendServer:
             log_warn("multi_cam support not available")
             return
         
+        log_info(f'Initial search finds {self.cam_cnt} cams')
+        
         # check if everything is correct with modality
         for offset in range(0,self.cam_cnt):
             verify_cam_name = self.data_list[offset][self.tag_entry_cam]
@@ -362,6 +366,8 @@ class BackendServer:
             log_warn("data does not pass check with modality. Camera names are not consistant.")
             log_warn("multi_cam support not available")
             return
+        
+        log_ok(f'{self.cam_cnt} found and verified')
         
     def save_csv(self):
         df = pd.DataFrame(self.data_list, columns=self.data_column_list)
