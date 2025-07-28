@@ -251,17 +251,32 @@ class BackendServer:
             if entry.strip()[0:9] == 'tag_code_':
                 self.tag_code_list.append(int(entry.strip()[9:19]))
                 self.tag_column_entry.append(cnt)
-                log_info(f"Found tag code at column {cnt} with code {int(entry.strip()[9:19])}")
+                log_info(f"Found tag_code_* at column {cnt} with code {int(entry.strip()[9:19])}")
             else:
                 self.non_tag_data_column_list.append(entry)
             cnt+=1
             
         if self.tag_code_list:
             log_ok(f"Successfully extracted tag code list {self.tag_code_list}")
+            
         else:
-            log_error(f"Error: No column matching 'tag_code_' found.")
-            log_error(f"Check input CSV data.")
-            sys.exit(1)
+            # alternate method
+            log_info("No column matching 'tag_code_' found. Checking data_column_list for entry matching 'tag_code'")
+            cnt = 0
+            for entry in self.data_column_list:
+                if entry.strip() == 'tag_code':
+                    self.tag_code_list.append(self.data_list[0][cnt])
+                if entry.strip() == 'label':
+                    self.tag_column_entry.append(cnt)
+                cnt+=1
+        
+            if self.tag_code_list :
+                log_ok(f"Successfully extracted tag code list {self.tag_code_list}")
+            else:
+                log_info(f"No column matching 'tag_code' found.")
+                log_error(f"Error: No column matching 'tag_code_*' or 'tag_code' found.")
+                log_error(f"Check input CSV data.")
+                sys.exit(1)
             
         # get total tag cnt
         self.tag_cnt = len(self.tag_column_entry)
