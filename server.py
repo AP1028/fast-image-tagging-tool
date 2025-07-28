@@ -9,10 +9,12 @@ import pandas as pd
 default_setting = {
         "host": "0.0.0.0", # socket bind ip address
         "port": 52973, # socket bind port
-        "csv_dir": "data", # csv data folder
+        "csv_dir": "data", # csv data dir for now. Will support folder in the future.
         "csv_save_dir": "data", # csv data save folder
         "tag_path": "tag.csv", # tag file location
-        "save_to_same_file": False
+        "save_to_same_file": False, # whether to save to the same file as source csv. ignore csv_save_dir if set to True.
+        
+        "multi_cam": False # WIP
     }
 class bcolors:
     HEADER = '\033[95m'
@@ -120,8 +122,15 @@ class BackendServer:
             else:
                 self.save_to_same_file = False
         except KeyError:
-            log_warn("Missing multiple_selection in setting, using false as default")
+            log_warn("Missing save_to_same_file in setting, using False as default")
             self.save_to_same_file = False
+        
+        # check if multicam support
+        try: 
+            self.multi_cam = setting_data["multi_cam"]
+        except KeyError:
+            log_warn("Missing multi_cam in setting, using False as default")
+            self.multi_cam = False
         
         # handle write dir
         if self.save_to_same_file == False:
