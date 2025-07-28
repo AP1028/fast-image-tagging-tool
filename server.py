@@ -208,12 +208,18 @@ class BackendServer:
         
         # format: self.data_list[row][column]
 
+        # getting tag entry, index for 'code' 'alias' in metadata and 'file_path' for data
         self.get_tag_entry_code() 
         self.get_tag_entry_alias() 
         self.get_tag_entry_file_path() 
         
+        # get tag code list in data and the corresponding entry list
         self.get_tag_code_and_entry_list()
+        # get alias list with the tag code, by searching metadata
         self.get_tag_column_alias()
+        
+        # get camera cnt
+        self.get_cam_cnt()
     
     def get_tag_entry_code(self):
         # get tag code entry
@@ -313,7 +319,49 @@ class BackendServer:
             log_error(f'Error: alias list empty.')
             log_error(f'You are not supposed to see this as you should have exited in self.get_tag_code_and_entry_list()')
             sys.exit(1)
+    
+    def get_cam_cnt(self):
+        # get cam index
+        self.cam_cnt = -1
+        self.tag_entry_cam = -1
+        cnt = 0
+        for entry in self.data_column_list:
+            if entry == 'modality':
+                self.tag_entry_cam = cnt
+                break
+            cnt += 1
+        if self.tag_entry_cam == -1:
+            log_warn("'modality' not found in data_column_list.")
+            log_warn("multi_cam support not available")
+            return
         
+        # modality found
+        cam_dic = {}
+        for i in range(0,self.data_cnt):
+            cam_name = self.data_list[i][self.tag_entry_cam]
+            if cam_name in cam_dic:
+                self.cam_cnt = i
+                break
+            else:
+                cam_dic[cam_name] = None
+
+        if self.cam_cnt == -1:
+            log_warn("Somehow all camera names in 'modality' are different.")
+            log_warn("multi_cam support not available")
+            return
+        
+        # check if everything is correct with modality
+        for offset in range(0,self.cam_cnt):
+            verify_cam_name = self.data_list[offset][self.tag_entry_cam]
+            for i in range(offset, self.data_cnt, self.cam_cnt):
+                if self.data_list[i][self.tag_entry_cam] != verify_cam_name:
+                    self.cam_cnt = -1
+                    break
+                
+        if self.tag_entry_cam == -1:
+            log_warn("data does not pass check with modality. Camera names are not consistant.")
+            log_warn("multi_cam support not available")
+            return
         
     def save_csv(self):
         df = pd.DataFrame(self.data_list, columns=self.data_column_list)
@@ -375,18 +423,20 @@ class BackendServer:
                 log_network("Header matched, reading socket message")
                 cmd = struct.unpack('B', self.safe_recv(conn,1))[0]
                 
-                # request image
+                # req image
                 if cmd == 0x01: 
-                    self.handle_image_request(conn)
-                # request csv tag
+                    self.handle_image_req(conn)
+                # req csv tag
                 elif cmd == 0x02:  
-                    self.handle_tag_request(conn)
-                elif cmd == 0x03:  # request csv change
-                    self.handle_csv_change_request(conn)
+                    self.handle_tag_req(conn)
+                elif cmd == 0x03:  # req csv change
+                    self.handle_csv_change_req(conn)
                 elif cmd == 0x04:  # save
-                    self.handle_save_request(conn)
-                elif cmd == 0x06:  # request partial csv data
-                    self.handle_partial_csv_request(conn)
+                    self.handle_save_req(conn)
+                elif cmd == 0x05:  # camera count
+                    self.handle_cam_cnt_req(conn)
+                elif cmd == 0x06:  # req partial csv data
+                    self.handle_partial_csv_req(conn)
                 else:
                     log_warn(f"Unknown cmd byte {cmd}. Maybe check version?")
                     
@@ -395,17 +445,17 @@ class BackendServer:
         finally:
             conn.close()
 
-    def handle_image_request(self,conn):
+    def handle_image_req(self,conn):
         data = self.safe_recv(conn,4)
         index = struct.unpack('>I', data)[0]
         log_network(f'Received request for image {index}')
         self.send_image(conn, index)
 
-    def handle_tag_request(self,conn):
+    def handle_tag_req(self,conn):
         log_network(f'Received request for CSV tag name')
         self.send_tag(conn)
     
-    def handle_csv_change_request(self,conn):
+    def handle_csv_change_req(self,conn):
         data = self.safe_recv(conn,12)
         csv_data_slice = []
         index1, index2, tag_index_cnt = struct.unpack('>III', data)
@@ -423,7 +473,7 @@ class BackendServer:
         self.update_tag(conn, index1, index2, csv_data_slice)
         safe_sendall(conn,b'\xff\x03\x00')
     
-    def handle_save_request(self,conn):
+    def handle_save_req(self,conn):
         log_network('Received request saving')  
         # save
         if self.save_csv():
@@ -431,9 +481,17 @@ class BackendServer:
         else:
             safe_sendall(conn,b'\xff\x04\x01')  
     
-    def handle_partial_csv_request(self,conn):
+    def handle_partial_csv_req(self,conn):
         log_network('Received request for partial CSV data')
         self.send_partial_csv(conn)
+    
+    def handle_cam_cnt_req(self,conn):
+        log_network('Received request for camera count data')
+        if self.cam_cnt==-1:
+            safe_sendall(conn,b'\xff\x05\x01')  
+        else:
+            safe_sendall(conn,b'\xff\x05')  
+            safe_sendall(conn,struct.pack('>I', self.cam_cnt))  
 
     def send_image(self, conn, index):
         # server will send image from index1 to index2
@@ -442,7 +500,7 @@ class BackendServer:
             return
         
         image_path = self.data_list[index][self.tag_entry_file_path]
-        log_info(f'Request received sending image {index} with path {image_path}')
+        log_info(f'request received sending image {index} with path {image_path}')
         
         try:
             with open(image_path, 'rb') as f:
