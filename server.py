@@ -359,6 +359,7 @@ class BackendServer:
             verify_cam_name = self.data_list[offset][self.tag_entry_cam]
             log_info(f'verify_cam_name is {verify_cam_name} at {offset}')
             for i in range(offset, self.data_cnt, self.cam_cnt):
+                log_info(f'checking {i}')
                 if self.data_list[i][self.tag_entry_cam] != verify_cam_name:
                     log_info(f'mismatch at {self.tag_entry_cam} with name of {self.data_list[i][self.tag_entry_cam]}')
                     self.cam_cnt = -1
