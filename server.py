@@ -362,7 +362,7 @@ class BackendServer:
                     self.cam_cnt = -1
                     break
                 
-        if self.tag_entry_cam == -1:
+        if self.cam_cnt == -1:
             log_warn("data does not pass check with modality. Camera names are not consistant.")
             log_warn("multi_cam support not available")
             return
