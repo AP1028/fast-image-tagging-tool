@@ -140,7 +140,7 @@ class FrontendClient:
     def create_ui(self):
         log_info('Building GUI')
 
-        time.sleep(0.1)
+        time.sleep(0.5)
         # Lock until at least self.tag_cnt is available
         while (self.tag_cnt == None or self.data_cnt == None):
             log_warn('Resend request for self.tag_cnt and self.data_cnt to be loaded.')

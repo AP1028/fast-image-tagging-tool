@@ -14,7 +14,7 @@ default_setting = {
         "tag_path": "tag.csv", # tag file location
         "save_to_same_file": False, # whether to save to the same file as source csv. ignore csv_save_dir if set to True.
         
-        "multi_cam": False # WIP
+        # "multi_cam": False # WIP
     }
 class bcolors:
     HEADER = '\033[95m'
@@ -126,11 +126,11 @@ class BackendServer:
             self.save_to_same_file = False
         
         # check if multicam support
-        try: 
-            self.multi_cam = setting_data["multi_cam"]
-        except KeyError:
-            log_warn("Missing multi_cam in setting, using False as default")
-            self.multi_cam = False
+        # try: 
+        #     self.multi_cam = setting_data["multi_cam"]
+        # except KeyError:
+        #     log_warn("Missing multi_cam in setting, using False as default")
+        #     self.multi_cam = False
         
         # handle write dir
         if self.save_to_same_file == False:
