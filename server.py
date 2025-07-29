@@ -28,13 +28,22 @@ class bcolors:
     UNDERLINE = '\033[4m'
 
 class Clip:
-    def __init__(self, current_index, next_index, cam_cnt = -1):
-        self.current_index = current_index
-        self.next_index = next_index
-        cam_cnt = cam_cnt
+    def __init__(self, begin_index, end_index, cam_cnt = -1):
+        self.begin_index = begin_index
+        self.end_index = end_index
+        self.cam_cnt = cam_cnt
     
     def set_cam_cnt(self,cam_cnt):
-        cam_cnt = cam_cnt
+        self.cam_cnt = cam_cnt
+    
+    def begin(self):
+        return self.begin_index
+    
+    def end(self):
+        return self.end_index
+    
+    def cam(self):
+        return self.cam_cnt
         
 
 def log_network(str):
@@ -355,17 +364,12 @@ class BackendServer:
         clip_index_pair_list = []
         old_clip_id = self.get_clip_id(0)
         old_clip_index = 0
-        
-        # log_info(f'start checking id starting with {old_clip_id} at 0')
-        
+
         for i in range(0,self.data_cnt):
-            # log_info(f'id of {i} is {self.get_clip_id(i)}')
             if self.get_clip_id(i) != old_clip_id:
                 clip_index_pair_list.append((old_clip_index,i))
                 old_clip_index = i
                 old_clip_id = self.get_clip_id(i)
-                # log_info(f'clip boundary detected at {i}')
-                # log_info(f'New clip id: {old_clip_id}')
                 
         log_info(f'{len(clip_index_pair_list)} clips detected.')
         
@@ -392,7 +396,6 @@ class BackendServer:
                 break
             cnt += 1
             
-    
     def get_cam_cnt(self,index_pair):
         # get cam index
         if self.data_entry_cam == -1:
@@ -511,7 +514,7 @@ class BackendServer:
                 elif cmd == 0x04:  # save
                     self.handle_save_req(conn)
                 elif cmd == 0x05:  # camera count
-                    self.handle_cam_cnt_req(conn)
+                    self.handle_clip_req(conn)
                 elif cmd == 0x06:  # req partial csv data
                     self.handle_partial_csv_req(conn)
                 else:
@@ -558,17 +561,23 @@ class BackendServer:
         else:
             safe_sendall(conn,b'\xff\x04\x01')  
     
+    def handle_clip_req(self,conn):
+        data = self.safe_recv(conn,4)
+        index = struct.unpack('>I', data)[0]
+        log_network(f'Received request for clip info at image {index}')
+        self.send_clip(conn)
+    
     def handle_partial_csv_req(self,conn):
         log_network('Received request for partial CSV data')
         self.send_partial_csv(conn)
     
-    def handle_cam_cnt_req(self,conn):
-        log_network('Received request for camera count data')
-        if cam_cnt==-1:
-            safe_sendall(conn,b'\xff\x05\x01')  
-        else:
-            safe_sendall(conn,b'\xff\x05')  
-            safe_sendall(conn,struct.pack('>I', cam_cnt))  
+    
+        
+        # if cam_cnt==-1:
+        #     safe_sendall(conn,b'\xff\x05\x01')  
+        # else:
+        #     safe_sendall(conn,b'\xff\x05')  
+        #     safe_sendall(conn,struct.pack('>I', cam_cnt))  
 
     def send_image(self, conn, index):
         # server will send image from index1 to index2
@@ -626,7 +635,14 @@ class BackendServer:
             for j in range (0,self.tag_cnt):
                 self.data_list[i][self.data_tag_entry_list[j]] = csv_data_slice[j]
                 log_info(f'writing row {i} column {self.data_tag_entry_list[j]} to {csv_data_slice[j]}')
-        
+    
+    def send_clip(self,conn,index):
+        clip: Clip = self.data_clip_list[index]
+        safe_sendall(conn,b'\xff\x05\x00')
+        safe_sendall(conn,struct.pack('>I', clip.begin))
+        safe_sendall(conn,struct.pack('>I', clip.end))
+        safe_sendall(conn,struct.pack('>I', clip.cam))
+    
     def send_partial_csv(self,conn):
         # build partial CSV
         partial_csv = self.data_csv.copy(deep=True)

@@ -88,13 +88,13 @@ python client.py
 | Client => Server | Request CSV Tag | 0xFF 0x02 |
 | Client => Server | CSV Change Request | 0xFF 0x03 index1(4 bytes), index2(4 bytes), tag_index_cnt(4 bytes), True/False(1 byte), ... |
 | Client => Server | Request Save | 0xFF 0x04 |
-| Client => Server | Request Camera Count | 0xFF 0x05 |
+| Client => Server | Request Clip Data | 0xFF 0x05 index(4 bytes) |
 | Client => Server | Request Partial CSV Data | 0xFF 0x06 |
 | Server => Client | Send Image | 0xFF 0x01 OK(0x00, 1 byte) index(4 bytes) size(4 bytes) img_data<br/>0xFF 0x01 ERROR(0x01, 1 byte) index(4 bytes) size(4 bytes) error_msg |
 | Server => Client | Send CSV Tag | 0xFF 0x02 OK(0x00, 1 byte) tag_cnt(4 bytes) data size(4 bytes) data(True: 0x00, False: 0x01) ...<br/>0xFF 0x02 ERROR(0x01, 1 byte) size(4 bytes) error_message |
 | Server => Client | CSV Change Response | 0xFF 0x03 OK(0x00, 1 byte)<br/>0xFF 0x03 ERROR(0x01, 1 byte) size(4 bytes) error_message |
 | Server => Client | Save Response | 0xFF 0x04 OK(0x00, 1 byte)<br/>0xFF 0x04 ERROR(0x01, 1 byte) size(4 bytes) error_message |
-| Server => Client | Send Camera Count | 0xFF 0x05 OK(0x00, 1 byte) cnt (4 bytes)<br/>0xFF 0x05 ERROR(0x01, 1 byte)|
+| Server => Client | Send Clip Data | 0xFF 0x05 OK(0x00, 1 byte) clip_start(4 bytes) clip_end(4 bytes) clip_cam_cnt(4byte)<br/>0xFF 0x05 ERROR(0x01, 1 byte)|
 | Server => Client | Send Partial CSV Data | 0xFF 0x06 OK(0x00, 1 byte) size(4 bytes) partial_csv_data<br/>0xFF 0x06 ERROR(0x01, 1 byte) |
 
 
