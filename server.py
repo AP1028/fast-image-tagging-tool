@@ -359,7 +359,7 @@ class BackendServer:
         log_info(f'start checking id starting with {old_clip_id} at 0')
         
         for i in range(0,self.data_cnt):
-            log_info(f'id of {i} is {self.get_clip_id(i)}')
+            # log_info(f'id of {i} is {self.get_clip_id(i)}')
             if self.get_clip_id(i) != old_clip_id:
                 clip_index_pair_list.append((old_clip_index,i))
                 old_clip_index = i
@@ -418,7 +418,7 @@ class BackendServer:
         # check if everything is correct with modality
         for offset in range(0,cam_cnt):
             verify_cam_name = self.data_list[index_pair[0] + offset][self.data_entry_cam]
-            log_info(f'verify_cam_name is {verify_cam_name} at {offset}')
+            # log_info(f'verify_cam_name is {verify_cam_name} at {offset}')
             for i in range(index_pair[0] + offset, index_pair[1], cam_cnt):
                 log_info(f'checking {i}')
                 if self.data_list[i][self.data_entry_cam] != verify_cam_name:
