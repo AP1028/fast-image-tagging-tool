@@ -203,14 +203,14 @@ class BackendServer:
 
     def build_csv(self):
         # handle data csv
-        data_csv = pd.read_csv(self.csv_path)
-        log_ok(f"Data CSV loaded with size of {len(data_csv)}")
+        self.data_csv = pd.read_csv(self.csv_path)
+        log_ok(f"Data CSV loaded with size of {len(self.data_csv)}")
         
-        self.data_column_list = data_csv.columns.tolist()
+        self.data_column_list = self.data_csv.columns.tolist()
         log_info(f"data_column_list:")
         log_info(f"{self.data_column_list}")
         
-        self.data_list = data_csv.values.tolist()
+        self.data_list = self.data_csv.values.tolist()
         self.data_cnt = len(self.data_list)
         log_ok(f"data_list loaded with size of {len(self.data_list)}")
         
@@ -635,7 +635,7 @@ class BackendServer:
     
     def send_clip(self,conn):
         safe_sendall(conn,b'\xff\x05\x00')
-        safe_sendall(conn,struct.pack('>I', len(self.clip_cnt)))
+        safe_sendall(conn,struct.pack('>I', self.clip_cnt))
         for clip in self.data_clip_list:
             safe_sendall(conn,struct.pack('>I', clip['begin']))
             safe_sendall(conn,struct.pack('>I', clip['end']))

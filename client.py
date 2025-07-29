@@ -196,15 +196,37 @@ class FrontendClient:
 
         self.slider = tk.Scale(self.status_bar, from_=1, to=self.data_cnt, orient=tk.HORIZONTAL, command=self.on_slider_move)
         self.slider.pack(fill=tk.X, expand=True)
-
         
         # image display (80% space)
         self.img_frame = ttk.Frame(self.main_frame)
         self.img_frame.pack()
+        
+        # create list for all cameras
+        self.camera_frame_list = []
+        
         self.img_label = ttk.Label(self.img_frame)
         self.img_label.pack()
+        
+        self.labeling_button_list = []
+        for i in range (0,self.tag_cnt):
+            button = ttk.Button(
+                self.img_frame, 
+                text=f'[{i+1}] {self.alias_list[i]}', 
+                command=lambda idx=i: self.handle_selection(idx)
+                )
+            self.labeling_button_list.append(button)
+            self.labeling_button_list[i].pack(side=tk.LEFT, padx=5)
+            self.root.bind(str(i+1), self.keyboard_event)
+        # false button
+        self.false_button = ttk.Button(
+            self.img_frame, 
+            text='[F] False', 
+            command=lambda idx=-1: self.handle_selection(idx)
+            )
+        self.false_button.pack(side=tk.LEFT, padx=5)
+        self.root.bind('F', self.keyboard_event)
+        self.root.bind('f', self.keyboard_event)
 
-        # button area
         self.control_frame = ttk.Frame(self.root, padding=10)
         self.control_frame.pack(fill=tk.X)
 
@@ -226,29 +248,12 @@ class FrontendClient:
         self.root.bind('S', self.keyboard_event)
 
         # label section
-        self.labeling_frame = ttk.Frame(self.root, padding=10)
-        self.labeling_frame.pack(fill=tk.X)
+        # self.labeling_frame = ttk.Frame(self.root, padding=10)
+        # self.labeling_frame.pack(fill=tk.X)
 
-        self.labeling_button_list = []
+       
         
-        for i in range (0,self.tag_cnt):
-            button = ttk.Button(
-                self.labeling_frame, 
-                text=f'[{i+1}] {self.alias_list[i]}', 
-                command=lambda idx=i: self.handle_selection(idx)
-                )
-            self.labeling_button_list.append(button)
-            self.labeling_button_list[i].pack(side=tk.LEFT, padx=5)
-            self.root.bind(str(i+1), self.keyboard_event)
-        # false button
-        self.false_button = ttk.Button(
-            self.labeling_frame, 
-            text='[F] False', 
-            command=lambda idx=-1: self.handle_selection(idx)
-            )
-        self.false_button.pack(side=tk.LEFT, padx=5)
-        self.root.bind('F', self.keyboard_event)
-        self.root.bind('f', self.keyboard_event)
+        
 
         # # input section
         # # may change to sub window
@@ -405,7 +410,7 @@ class FrontendClient:
 
                 self.img_label.config(
                 text=f"Image {self.img_index+1} requested\n Waiting for server response.", 
-                foreground="white", background="gray", font=("Arial", 12), anchor="center", justify="center"
+                foreground="white", background="gray", font=("Arial", 12), anchor="center", justify="center",
                 )
             # error, print error msg
             else:
@@ -416,7 +421,7 @@ class FrontendClient:
                 
                 self.img_label.config(
                 text=f"Remote server responded with the following error:\n {error_msg}", 
-                foreground="white",background="gray", font=("Arial", 12), wraplength=600,anchor="center", justify="center" 
+                foreground="white",background="gray", font=("Arial", 12), wraplength=600,anchor="center", justify="center",
                 )
         # image in cache, process and print image with PIL
         else:
@@ -660,7 +665,7 @@ class FrontendClient:
             data = self.safe_recv(4)
             self.clip_cnt = struct.unpack('>I', data)[0]
             self.clip_list = []
-            for i in self.clip_cnt:
+            for i in range(0,self.clip_cnt):
                 clip = {}
                 data = self.safe_recv(12)
                 clip['begin'],clip['end'],clip['cam'] = struct.unpack('>III', data)
@@ -745,12 +750,14 @@ class FrontendClient:
                 combined_clip = (combined_clip_begin_index,combined_clip_end_index)
                 self.combined_clip_list.append(combined_clip)
             
-        
-        
-
     def start_client(self):
         log_info('Starting GUI')
         self.root.mainloop()
+    
+class DisplayWidget():
+    def __init__():
+        pass
+    
 
 if __name__ == "__main__":
       # Main window
