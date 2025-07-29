@@ -366,7 +366,7 @@ class BackendServer:
         old_clip_index = 0
 
         for i in range(0,self.data_cnt):
-            if self.get_clip_id(i) != old_clip_id:
+            if self.get_clip_id(i) != old_clip_id or i>= self.data_cnt-1:
                 clip_index_pair_list.append((old_clip_index,i))
                 old_clip_index = i
                 old_clip_id = self.get_clip_id(i)
@@ -382,8 +382,11 @@ class BackendServer:
         
         for i in range(0,len(clip_index_pair_list)):
             cam_cnt = self.get_cam_cnt(clip_index_pair_list[i])
-            for _ in range(clip_index_pair_list[i][0], clip_index_pair_list[i][1]):
-                self.data_clip_list.append(Clip(clip_index_pair_list[i][0],clip_index_pair_list[i][1],cam_cnt))
+            self.data_clip_list.append(Clip(clip_index_pair_list[i][0],clip_index_pair_list[i][1],cam_cnt))
+            
+        self.clip_cnt = len(self.data_clip_list)
+        
+        log_ok(f'{self.clip_cnt} clips successfully stored.')
     
     def get_modality_entry(self):
         # get cam index
@@ -563,8 +566,8 @@ class BackendServer:
     
     def handle_clip_req(self,conn):
         data = self.safe_recv(conn,4)
-        index = struct.unpack('>I', data)[0]
-        log_network(f'Received request for clip info at image {index}')
+        # index = struct.unpack('>I', data)[0]
+        log_network(f'Received request for clip')
         self.send_clip(conn)
     
     def handle_partial_csv_req(self,conn):
@@ -636,12 +639,13 @@ class BackendServer:
                 self.data_list[i][self.data_tag_entry_list[j]] = csv_data_slice[j]
                 log_info(f'writing row {i} column {self.data_tag_entry_list[j]} to {csv_data_slice[j]}')
     
-    def send_clip(self,conn,index):
-        clip: Clip = self.data_clip_list[index]
+    def send_clip(self,conn):
         safe_sendall(conn,b'\xff\x05\x00')
-        safe_sendall(conn,struct.pack('>I', clip.begin))
-        safe_sendall(conn,struct.pack('>I', clip.end))
-        safe_sendall(conn,struct.pack('>I', clip.cam))
+        safe_sendall(conn,struct.pack('>I', len(self.clip_cnt)))
+        for clip in self.data_clip_list:
+            safe_sendall(conn,struct.pack('>I', clip.begin))
+            safe_sendall(conn,struct.pack('>I', clip.end))
+            safe_sendall(conn,struct.pack('>I', clip.cam))
     
     def send_partial_csv(self,conn):
         # build partial CSV
