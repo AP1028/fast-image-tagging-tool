@@ -403,7 +403,7 @@ class BackendServer:
         for i in range(index_pair[0],index_pair[1]):
             cam_name = self.data_list[i][self.data_entry_cam]
             if cam_name in cam_dic:
-                cam_cnt = i
+                cam_cnt = i - index_pair[0]
                 break
             else:
                 cam_dic[cam_name] = None
@@ -420,7 +420,7 @@ class BackendServer:
             verify_cam_name = self.data_list[index_pair[0] + offset][self.data_entry_cam]
             # log_info(f'verify_cam_name is {verify_cam_name} at {offset}')
             for i in range(index_pair[0] + offset, index_pair[1], cam_cnt):
-                log_info(f'checking {i}')
+                # log_info(f'checking {i}')
                 if self.data_list[i][self.data_entry_cam] != verify_cam_name:
                     log_info(f'mismatch at {i} with name of {self.data_list[i][self.data_entry_cam]}')
                     cam_cnt = -1
