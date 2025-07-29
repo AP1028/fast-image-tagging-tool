@@ -437,7 +437,7 @@ class BackendServer:
             log_warn("multi_cam support not available")
             return -1 
         
-        log_ok(f'{cam_cnt} found and verified')
+        # log_ok(f'{cam_cnt} found and verified')
         return cam_cnt
         
     def save_csv(self):
