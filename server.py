@@ -11,7 +11,7 @@ default_setting = {
         "port": 52973, # socket bind port
         "csv_dir": "data", # csv data dir for now. Will support folder in the future.
         "csv_save_dir": "data", # csv data save folder
-        "tag_path": "tag.csv", # tag file location
+        "meta_path": "meta.csv", # tag file location
         "save_to_same_file": False, # whether to save to the same file as source csv. ignore csv_save_dir if set to True.
         
         # "multi_cam": False # WIP
@@ -26,6 +26,16 @@ class bcolors:
     ENDC = '\033[0m'
     BOLD = '\033[1m'
     UNDERLINE = '\033[4m'
+
+class Clip:
+    def __init__(self, current_index, next_index, cam_cnt = -1):
+        self.current_index = current_index
+        self.next_index = next_index
+        cam_cnt = cam_cnt
+    
+    def set_cam_cnt(self,cam_cnt):
+        cam_cnt = cam_cnt
+        
 
 def log_network(str):
     print(f'[{bcolors.OKCYAN}SOCK{bcolors.ENDC}] {str}')
@@ -108,9 +118,9 @@ class BackendServer:
 
         # get tag csv path
         try:
-            self.tag_path = setting_data["tag_path"]
+            self.meta_path = setting_data["meta_path"]
         except KeyError:
-            log_error("Missing tag_path!")
+            log_error("Missing meta_path!")
             sys.exit(1)
         
         # check if write to same file
@@ -184,70 +194,70 @@ class BackendServer:
 
     def build_csv(self):
         # handle data csv
-        self.data_csv = pd.read_csv(self.csv_path)
-        log_ok(f"Data CSV loaded with size of {len(self.data_csv)}")
+        data_csv = pd.read_csv(self.csv_path)
+        log_ok(f"Data CSV loaded with size of {len(data_csv)}")
         
-        self.data_column_list = self.data_csv.columns.tolist()
+        self.data_column_list = data_csv.columns.tolist()
         log_info(f"data_column_list:")
         log_info(f"{self.data_column_list}")
         
-        self.data_list = self.data_csv.values.tolist()
+        self.data_list = data_csv.values.tolist()
         self.data_cnt = len(self.data_list)
         log_ok(f"data_list loaded with size of {len(self.data_list)}")
         
-        # handle tag csv
-        self.tag_csv = pd.read_csv(self.tag_path)
-        log_ok(f"Tag CSV loaded with size of {len(self.tag_csv)}")
+        # handle meta csv
+        meta_csv = pd.read_csv(self.meta_path)
+        log_ok(f"Meta CSV loaded with size of {len(meta_csv)}")
         
-        self.tag_data_column_list = self.tag_csv.columns.tolist()
-        log_info(f"tag_data_column_list:")
-        log_info(f"{self.tag_data_column_list}")
+        self.meta_column_list = meta_csv.columns.tolist()
+        log_info(f"meta_column_list:")
+        log_info(f"{self.meta_column_list}")
         
-        self.tag_data_list = self.tag_csv.values.tolist()
-        log_ok(f"tag_data_list loaded with size of {len(self.tag_data_list)}")
+        self.meta_data_list = meta_csv.values.tolist()
+        log_ok(f"meta_data_list loaded with size of {len(self.meta_data_list)}")
         
         # format: self.data_list[row][column]
 
         # getting tag entry, index for 'code' 'alias' in metadata and 'file_path' for data
-        self.get_tag_entry_code() 
-        self.get_tag_entry_alias() 
-        self.get_tag_entry_file_path() 
+        self.get_meta_entry_code() 
+        self.get_meta_entry_alias() 
+        self.get_data_entry_file_path() 
         
         # get tag code list in data and the corresponding entry list
         self.get_tag_code_and_entry_list()
         # get alias list with the tag code, by searching metadata
-        self.get_tag_column_alias()
+        self.get_tag_alias_list()
         
         # get camera cnt
-        self.get_cam_cnt()
+        self.get_data_clip_list()
     
-    def get_tag_entry_code(self):
-        # get tag code entry
+    def get_meta_entry_code(self):
+        # get meta code entry
         cnt = 0
-        for entry in self.tag_data_column_list:
+        for entry in self.meta_column_list:
             if entry.strip() == 'code':
-                self.tag_entry_code = cnt
-                log_info(f"Tag CSV has column at {self.tag_entry_code} matching 'code'")
+                self.meta_entry_code = cnt
+                log_info(f"Meta CSV has column at {self.meta_entry_code} matching 'code'")
                 break
             cnt+=1
     
-    def get_tag_entry_alias(self):
-        # get tag alias entry
+    def get_meta_entry_alias(self):
+        # get meta alias entry
         cnt = 0
-        for entry in self.tag_data_column_list:
+        for entry in self.meta_column_list:
             if entry.strip() == 'alias':
-                self.tag_entry_alias = cnt
-                log_info(f"Tag CSV has column at {self.tag_entry_alias} matching 'alias'")
+                self.meta_entry_alias = cnt
+                log_info(f"Meta CSV has column at {self.meta_entry_alias} matching 'alias'")
                 break
             cnt+=1
             
-    def get_tag_entry_file_path(self):
+    def get_data_entry_file_path(self):
         # get data file_path entry
         cnt = 0
         for entry in self.data_column_list:
             if entry.strip() == 'file_path':
-                self.tag_entry_file_path = cnt
-                log_ok(f"Data CSV has column at {self.tag_entry_file_path} matching 'file_path'")
+                self.data_entry_file_path = cnt
+                log_ok(f"Data CSV has column at {self.data_entry_file_path} matching 'file_path'")
                 return
             cnt+=1
         log_error(f"Data CSV has column at 'file_path'")
@@ -255,24 +265,24 @@ class BackendServer:
     def get_tag_code_and_entry_list(self):
         # get list of tags containing column location in data csv
         # and its alias
-        self.tag_code_list=[]
-        self.tag_column_entry=[]
-        self.non_tag_data_column_list=[]
+        self.data_tag_code_list=[]
+        self.data_tag_entry_list=[]
+        self.data_non_tag_entry_list=[]
         cnt = 0
         # search for column entry matching tag_code_ to get required tag code
         # and column entry number
         log_info("Checking data_column_list for entry matching 'tag_code_*'")
         for entry in self.data_column_list:
             if entry.strip()[0:9] == 'tag_code_':
-                self.tag_code_list.append(int(entry.strip()[9:19]))
-                self.tag_column_entry.append(cnt)
+                self.data_tag_code_list.append(int(entry.strip()[9:19]))
+                self.data_tag_entry_list.append(cnt)
                 log_info(f"Found tag_code_* at column {cnt} with code {int(entry.strip()[9:19])}")
             else:
-                self.non_tag_data_column_list.append(entry)
+                self.data_non_tag_entry_list.append(entry)
             cnt+=1
             
-        if self.tag_code_list:
-            log_ok(f"Successfully extracted tag code list {self.tag_code_list}")
+        if self.data_tag_code_list:
+            log_ok(f"Successfully extracted tag code list {self.data_tag_code_list}")
             
         else:
             # alternate method
@@ -280,13 +290,13 @@ class BackendServer:
             cnt = 0
             for entry in self.data_column_list:
                 if entry.strip() == 'tag_code':
-                    self.tag_code_list.append(self.data_list[0][cnt])
+                    self.data_tag_code_list.append(self.data_list[0][cnt])
                 if entry.strip() == 'label':
-                    self.tag_column_entry.append(cnt)
+                    self.data_tag_entry_list.append(cnt)
                 cnt+=1
         
-            if self.tag_code_list :
-                log_ok(f"Successfully extracted tag code list {self.tag_code_list}")
+            if self.data_tag_code_list :
+                log_ok(f"Successfully extracted tag code list {self.data_tag_code_list}")
             else:
                 log_info(f"No column matching 'tag_code' found.")
                 log_error(f"Error: No column matching 'tag_code_*' or 'tag_code' found.")
@@ -294,83 +304,135 @@ class BackendServer:
                 sys.exit(1)
             
         # get total tag cnt
-        self.tag_cnt = len(self.tag_column_entry)
+        self.tag_cnt = len(self.data_tag_entry_list)
     
-    def get_tag_column_alias(self):
+    def get_tag_alias_list(self):
         # search matching tag code in 'code' entry in tag csv list 
         # and record the alias
-        self.tag_column_alias=[]
+        self.data_tag_alias_list=[]
         log_info("Checking tag code list for alias name")
-        for tag_code in self.tag_code_list:
+        for tag_code in self.data_tag_code_list:
             alias = f"{tag_code}_fallback"
-            for i in range(0,len(self.tag_data_list)):
-                if tag_code == self.tag_data_list[i][self.tag_entry_code]:
-                    alias = self.tag_data_list[i][self.tag_entry_alias]
+            for i in range(0,len(self.meta_data_list)):
+                if tag_code == self.meta_data_list[i][self.meta_entry_code]:
+                    alias = self.meta_data_list[i][self.meta_entry_alias]
                     break
             if alias == f"{tag_code}_fallback":
                 log_warn(f'No alias found for tag code {tag_code}. Using {alias} as fallback.')
             else:
                 log_info(f"Found alias {alias}")
-            self.tag_column_alias.append(alias)
+            self.data_tag_alias_list.append(alias)
             
-        if self.tag_column_alias:
-            log_ok(f"Successfully extracted alias list {self.tag_column_alias}")
+        if self.data_tag_alias_list:
+            log_ok(f"Successfully extracted alias list {self.data_tag_alias_list}")
         else:
             log_error(f'Error: alias list empty.')
             log_error(f'You are not supposed to see this as you should have exited in self.get_tag_code_and_entry_list()')
             sys.exit(1)
     
-    def get_cam_cnt(self):
+    def get_clip_id_entry(self):
+        self.data_entry_clip = -1
+        cnt = 0
+        for entry in self.data_column_list:
+            if entry == 'clip_id':
+                self.data_entry_clip = cnt
+                break
+            cnt+=1
+    
+    def get_clip_id(self,index):
+        return self.data_list[index][self.data_entry_clip]
+    
+    def get_data_clip_list(self):
+        self.data_clip_list = []
+        
+        self.get_clip_id_entry()
+        if self.data_entry_clip == -1:
+            log_warn("No clip_id found in data column!")
+            return
+        
+        log_ok(f"clip_id is at {self.data_entry_clip}")
+        
+        clip_index_pair_list = []
+        old_clip_id = self.get_clip_id(0)
+        old_clip_index = 0
+        
+        log_info(f'start checking id starting with {old_clip_id} at 0')
+        
+        for i in range(0,self.data_cnt):
+            log_info(f'id of {i} is {self.get_clip_id(i)}')
+            if self.get_clip_id(i) != old_clip_id:
+                clip_index_pair_list.append((old_clip_index,i))
+                old_clip_index = i
+                old_clip_id = self.get_clip_id(i)
+                log_info(f'clip boundary detected at {i}')
+                log_info(f'New clip id: {old_clip_id}')
+        
+        self.get_modality_entry()
+        if self.data_entry_cam == -1:
+            log_warn("'modality' not found in data_column_list.")
+            log_warn("multi_cam support not available")
+        else:
+            log_info(f'Found modality at column {self.data_entry_cam}')
+        
+        for i in range(0,len(clip_index_pair_list)):
+            cam_cnt = self.get_cam_cnt(clip_index_pair_list[i])
+            for _ in range(clip_index_pair_list[i][0], clip_index_pair_list[i][1]):
+                self.data_clip_list.append(Clip(clip_index_pair_list[i][0],clip_index_pair_list[i][1],cam_cnt))
+    
+    def get_modality_entry(self):
         # get cam index
-        self.cam_cnt = -1
-        self.tag_entry_cam = -1
+        cam_cnt = -1
+        self.data_entry_cam = -1
         cnt = 0
         for entry in self.data_column_list:
             if entry == 'modality':
-                self.tag_entry_cam = cnt
+                self.data_entry_cam = cnt
                 break
             cnt += 1
-        if self.tag_entry_cam == -1:
-            log_warn("'modality' not found in data_column_list.")
-            log_warn("multi_cam support not available")
-            return
-        
-        log_info(f'Found modality at column {self.tag_entry_cam}')
+            
+    
+    def get_cam_cnt(self,index_pair):
+        # get cam index
+        if self.data_entry_cam == -1:
+            return -1
+        log_info(f'Search between {index_pair[0]} {index_pair[1]}')
         
         # modality found
+        cam_cnt = -1
         cam_dic = {}
-        for i in range(0,self.data_cnt):
-            cam_name = self.data_list[i][self.tag_entry_cam]
+        for i in range(index_pair[0],index_pair[1]):
+            cam_name = self.data_list[i][self.data_entry_cam]
             if cam_name in cam_dic:
-                self.cam_cnt = i
+                cam_cnt = i
                 break
             else:
                 cam_dic[cam_name] = None
 
-        if self.cam_cnt == -1:
+        if cam_cnt == -1:
             log_warn("Somehow all camera names in 'modality' are different.")
             log_warn("multi_cam support not available")
-            return
+            return -1
         
-        log_info(f'Initial search finds {self.cam_cnt} cams')
+        log_info(f'Initial search finds {cam_cnt} cams')
         
         # check if everything is correct with modality
-        for offset in range(0,self.cam_cnt):
-            verify_cam_name = self.data_list[offset][self.tag_entry_cam]
+        for offset in range(0,cam_cnt):
+            verify_cam_name = self.data_list[index_pair[0] + offset][self.data_entry_cam]
             log_info(f'verify_cam_name is {verify_cam_name} at {offset}')
-            for i in range(offset, self.data_cnt, self.cam_cnt):
+            for i in range(index_pair[0] + offset, index_pair[1], cam_cnt):
                 log_info(f'checking {i}')
-                if self.data_list[i][self.tag_entry_cam] != verify_cam_name:
-                    log_info(f'mismatch at {i} with name of {self.data_list[i][self.tag_entry_cam]}')
-                    self.cam_cnt = -1
+                if self.data_list[i][self.data_entry_cam] != verify_cam_name:
+                    log_info(f'mismatch at {i} with name of {self.data_list[i][self.data_entry_cam]}')
+                    cam_cnt = -1
                     break
                 
-        if self.cam_cnt == -1:
+        if cam_cnt == -1:
             log_warn("data does not pass check with modality. Camera names are not consistant.")
             log_warn("multi_cam support not available")
-            return
+            return -1 
         
-        log_ok(f'{self.cam_cnt} found and verified')
+        log_ok(f'{cam_cnt} found and verified')
+        return cam_cnt
         
     def save_csv(self):
         df = pd.DataFrame(self.data_list, columns=self.data_column_list)
@@ -496,11 +558,11 @@ class BackendServer:
     
     def handle_cam_cnt_req(self,conn):
         log_network('Received request for camera count data')
-        if self.cam_cnt==-1:
+        if cam_cnt==-1:
             safe_sendall(conn,b'\xff\x05\x01')  
         else:
             safe_sendall(conn,b'\xff\x05')  
-            safe_sendall(conn,struct.pack('>I', self.cam_cnt))  
+            safe_sendall(conn,struct.pack('>I', cam_cnt))  
 
     def send_image(self, conn, index):
         # server will send image from index1 to index2
@@ -508,7 +570,7 @@ class BackendServer:
             log_error("Error: you are requesting out of bound operation")
             return
         
-        image_path = self.data_list[index][self.tag_entry_file_path]
+        image_path = self.data_list[index][self.data_entry_file_path]
         log_info(f'request received sending image {index} with path {image_path}')
         
         try:
@@ -537,10 +599,10 @@ class BackendServer:
 
     def send_tag(self, conn):
         # send csv tag encoded
-        log_info(f'Need to send {self.tag_column_alias}')
+        log_info(f'Need to send {self.data_tag_alias_list}')
         safe_sendall(conn,b'\xff\x02\x00')
         safe_sendall(conn,struct.pack('>I', self.tag_cnt))
-        for alias in self.tag_column_alias:
+        for alias in self.data_tag_alias_list:
             alias_bytes = alias.encode('utf-8')
             alias_size = len(alias_bytes)
             safe_sendall(conn,struct.pack('>I', alias_size))
@@ -556,13 +618,13 @@ class BackendServer:
 
         for i in range(index1, index2+1):
             for j in range (0,self.tag_cnt):
-                self.data_list[i][self.tag_column_entry[j]] = csv_data_slice[j]
-                log_info(f'writing row {i} column {self.tag_column_entry[j]} to {csv_data_slice[j]}')
+                self.data_list[i][self.data_tag_entry_list[j]] = csv_data_slice[j]
+                log_info(f'writing row {i} column {self.data_tag_entry_list[j]} to {csv_data_slice[j]}')
         
     def send_partial_csv(self,conn):
         # build partial CSV
         partial_csv = self.data_csv.copy(deep=True)
-        for entry in self.non_tag_data_column_list:
+        for entry in self.data_non_tag_entry_list:
             partial_csv.drop(entry, inplace=True, axis=1)
         partial_csv_str = partial_csv.to_csv(index=False)
 
