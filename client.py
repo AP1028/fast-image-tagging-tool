@@ -204,8 +204,8 @@ class FrontendClient:
         # create list for all cameras
         self.camera_frame_list = []
         
-        self.img_label = ttk.Label(self.img_frame)
-        self.img_label.pack()
+        self.img_canvas = tk.Canvas(self.img_frame, width=796, height=448, bg="gray")
+        self.img_canvas.pack()
         
         self.labeling_button_list = []
         for i in range (0,self.tag_cnt):
@@ -389,14 +389,14 @@ class FrontendClient:
     # update things on the screen
     def init_frame(self):
         log_info(f"Printing frame with index {self.img_index}")
+        self.img_canvas.delete("all")
         # image out of bound
         if self.img_index < 0 or self.img_index >= self.data_cnt:
-            self.img_label.image = None
-            self.img_label.config(image='')
-
-            self.img_label.config(
-            text=f"Image {self.img_index} out of bound!\n Contact developer.",  
-            foreground="white", background="gray",font=("Arial", 24), anchor="center", justify="center"
+            self.img_canvas.create_text(
+            398, 224,  # Center position
+            text=f"Image {self.img_index} out of bound!\nContact developer.",
+            fill="white", font=("Arial", 24),
+            anchor="center", justify="center"
             )
         # image not in cache
         elif self.img_cache[self.img_index] == None:
@@ -405,23 +405,22 @@ class FrontendClient:
                 log_info(f"Image {self.img_index} not found in cache, sending web request")
                 self.request_image(self.img_index)
 
-                self.img_label.image = None
-                self.img_label.config(image='')
-
-                self.img_label.config(
-                text=f"Image {self.img_index+1} requested\n Waiting for server response.", 
-                foreground="white", background="gray", font=("Arial", 12), anchor="center", justify="center",
+                self.img_canvas.create_text(
+                398, 224,  # Center position
+                text=f"Image {self.img_index+1} requested\nWaiting for server response.",
+                fill="white", font=("Arial", 12),
+                anchor="center", justify="center"
                 )
             # error, print error msg
             else:
-                self.img_label.image = None
-                self.img_label.config(image='')
 
                 error_msg = self.img_error_msg[self.img_index]
                 
-                self.img_label.config(
-                text=f"Remote server responded with the following error:\n {error_msg}", 
-                foreground="white",background="gray", font=("Arial", 12), wraplength=600,anchor="center", justify="center",
+                self.img_canvas.create_text(
+                398, 224,  # Center position
+                text=f"Remote server responded with the following error:\n{error_msg}",
+                fill="white", font=("Arial", 12),
+                width=600, anchor="center", justify="center"
                 )
         # image in cache, process and print image with PIL
         else:
@@ -431,8 +430,9 @@ class FrontendClient:
             image.thumbnail((796, 448))  # adjust size
             photo = ImageTk.PhotoImage(image)
                 
-            self.img_label.config(image=photo)
-            self.img_label.image=photo
+            self.img_canvas.photo = photo
+            self.img_canvas.delete("all")
+            
     
     def update_ui(self):
         # buttons
