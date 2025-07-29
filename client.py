@@ -18,6 +18,7 @@ default_setting = {
         "multiple_selection": False,
         "always_save": True,
     }
+
 class bcolors:
     HEADER = '\033[95m'
     OKBLUE = '\033[94m'
@@ -69,6 +70,17 @@ class FrontendClient:
         # self.request_data_cnt()
         self.request_csv_tag_info()
         self.request_csv_data()
+        self.request_clip_data()
+        
+        # Lock until at least self.tag_cnt is available
+        time.sleep(0.5)
+        while (self.tag_cnt == None or self.data_cnt == None):
+            log_warn('Resend request for self.tag_cnt and self.data_cnt to be loaded.')
+            self.request_csv_tag_info()
+            self.request_csv_data()
+            time.sleep(0.5)
+        
+        log_ok(f'successfully loaded self.tag_cnt={self.tag_cnt} and self.data_cnt={self.data_cnt}')
         
         # start UI
         self.create_ui()
@@ -139,17 +151,6 @@ class FrontendClient:
 
     def create_ui(self):
         log_info('Building GUI')
-
-        time.sleep(0.5)
-        # Lock until at least self.tag_cnt is available
-        while (self.tag_cnt == None or self.data_cnt == None):
-            log_warn('Resend request for self.tag_cnt and self.data_cnt to be loaded.')
-            self.request_csv_tag_info()
-            self.request_csv_data()
-            time.sleep(0.5)
-        
-        log_ok(f'successfully loaded self.tag_cnt={self.tag_cnt} and self.data_cnt={self.data_cnt}')
-
         # init
         self.root = tk.Tk()
         self.root.title("AI Dataset Tagging Tool")
@@ -498,8 +499,8 @@ class FrontendClient:
             messagebox.showwarning("Connection error", 
                         f"{e}")
     
-    def request_data_cnt(self):
-        log_network(f'Request data cnt')
+    def request_clip_data(self):
+        log_network(f'Request clip data')
         try:
             self.safe_sendall(b'\xff\x05')
         except RuntimeError as e:
@@ -556,6 +557,9 @@ class FrontendClient:
                 # save completed
                 elif cmd == 0x04:  
                     self.receive_csv_save_msg()
+                # clip data
+                elif cmd == 0x05:  
+                    self.receive_clip_data()
                 # receive csv data
                 elif cmd == 0x06:  
                     self.receive_csv_data()
@@ -647,6 +651,24 @@ class FrontendClient:
             log_warn(f"Save failed!")
             messagebox.showwarning("Server error", 
                         f"Server failed to save the csv file. Check server console.")
+    
+    def receive_clip_data(self):
+        data = self.safe_recv(1)
+        status = struct.unpack('>B',data)[0]
+        if status == 0x00:
+            log_network(f"Receiving clip data")
+            data = self.safe_recv(4)
+            self.clip_cnt = struct.unpack('>I', data)[0]
+            self.clip_list = []
+            for i in self.clip_cnt:
+                clip = {}
+                data = self.safe_recv(12)
+                clip['begin'],clip['end'],clip['cam'] = struct.unpack('>III', data)
+                self.clip_list.append(clip)
+            self.handle_clip_data()
+        else:
+            log_error(f'Error in receiving clip data')
+    
     def receive_csv_data(self):
         log_network("receiving csv data")
         data = self.safe_recv(5)
@@ -696,6 +718,35 @@ class FrontendClient:
             self.labeling_status.append(False)
         
         log_info(f"CSV list received with size of {len(self.data_list)}")
+    
+    def handle_clip_data(self):
+        # self.clip_data = []
+        
+        # verify all clip cover all the images
+        for i in range(0,self.clip_cnt-1):
+            if self.clip_list[i]['end'] != self.clip_list[i+1]['begin']:
+                log_error(f'Broken clip data! clip {i} end {self.clip_list[i]['end']}, clip {i+1} begin {self.clip_list[i+1]['begin']}')
+        
+        self.combined_entry_list = []
+        self.combined_clip_list = []
+        
+        for clip in self.clip_list:
+            combined_clip_begin_index = len(self.combined_entry_list)
+            
+            for i in range(clip['begin'],clip['end'],clip['cam']):
+                combined_entry = []
+                for j in range(i,i+clip['cam']):
+                    combined_entry.append(j)
+                self.combined_entry_list.append(combined_entry)
+                
+            combined_clip_end_index = len(self.combined_entry_list)
+            
+            for i in range(clip['begin'],clip['end'],clip['cam']):
+                combined_clip = (combined_clip_begin_index,combined_clip_end_index)
+                self.combined_clip_list.append(combined_clip)
+            
+        
+        
 
     def start_client(self):
         log_info('Starting GUI')

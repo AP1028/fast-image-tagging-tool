@@ -88,7 +88,7 @@ python client.py
 | Client => Server | Request CSV Tag | 0xFF 0x02 |
 | Client => Server | CSV Change Request | 0xFF 0x03 index1(4 bytes), index2(4 bytes), tag_index_cnt(4 bytes), True/False(1 byte), ... |
 | Client => Server | Request Save | 0xFF 0x04 |
-| Client => Server | Request Clip Data | 0xFF 0x05 index(4 bytes) |
+| Client => Server | Request Clip Data | 0xFF 0x05 |
 | Client => Server | Request Partial CSV Data | 0xFF 0x06 |
 | Server => Client | Send Image | 0xFF 0x01 OK(0x00, 1 byte) index(4 bytes) size(4 bytes) img_data<br/>0xFF 0x01 ERROR(0x01, 1 byte) index(4 bytes) size(4 bytes) error_msg |
 | Server => Client | Send CSV Tag | 0xFF 0x02 OK(0x00, 1 byte) tag_cnt(4 bytes) data_size(4 bytes) <data(True: 0x00, False: 0x01)> ...<br/>0xFF 0x02 ERROR(0x01, 1 byte) size(4 bytes) error_message |

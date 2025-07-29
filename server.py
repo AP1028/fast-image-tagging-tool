@@ -27,23 +27,23 @@ class bcolors:
     BOLD = '\033[1m'
     UNDERLINE = '\033[4m'
 
-class Clip:
-    def __init__(self, begin_index, end_index, cam_cnt = -1):
-        self.begin_index = begin_index
-        self.end_index = end_index
-        self.cam_cnt = cam_cnt
+# class Clip:
+#     def __init__(self, begin_index, end_index, cam_cnt = -1):
+#         self.begin_index = begin_index
+#         self.end_index = end_index
+#         self.cam_cnt = cam_cnt
     
-    def set_cam_cnt(self,cam_cnt):
-        self.cam_cnt = cam_cnt
+#     def set_cam_cnt(self,cam_cnt):
+#         self.cam_cnt = cam_cnt
     
-    def begin(self):
-        return self.begin_index
+#     def begin(self):
+#         return self.begin_index
     
-    def end(self):
-        return self.end_index
+#     def end(self):
+#         return self.end_index
     
-    def cam(self):
-        return self.cam_cnt
+#     def cam(self):
+#         return self.cam_cnt
         
 
 def log_network(str):
@@ -382,7 +382,7 @@ class BackendServer:
         
         for i in range(0,len(clip_index_pair_list)):
             cam_cnt = self.get_cam_cnt(clip_index_pair_list[i])
-            self.data_clip_list.append(Clip(clip_index_pair_list[i][0],clip_index_pair_list[i][1],cam_cnt))
+            self.data_clip_list.append({'begin':clip_index_pair_list[i][0],'end':clip_index_pair_list[i][1],'cam':cam_cnt})
             
         self.clip_cnt = len(self.data_clip_list)
         
@@ -390,7 +390,6 @@ class BackendServer:
     
     def get_modality_entry(self):
         # get cam index
-        cam_cnt = -1
         self.data_entry_cam = -1
         cnt = 0
         for entry in self.data_column_list:
@@ -402,11 +401,12 @@ class BackendServer:
     def get_cam_cnt(self,index_pair):
         # get cam index
         if self.data_entry_cam == -1:
-            return -1
+            log_warn(f'No cam entry found in data csv, fallback to 1')
+            return 1
         # log_info(f'Search between {index_pair[0]} {index_pair[1]}')
         
         # modality found
-        cam_cnt = -1
+        cam_cnt = 0
         cam_dic = {}
         for i in range(index_pair[0],index_pair[1]):
             cam_name = self.data_list[i][self.data_entry_cam]
@@ -416,12 +416,12 @@ class BackendServer:
             else:
                 cam_dic[cam_name] = None
 
-        if cam_cnt == -1:
-            log_warn(f'Between {index_pair[0]} and {index_pair[1]}')
+        if cam_cnt == 0:
+            log_warn(f'Between {index_pair[0]} and {index_pair[1]-1}')
             log_warn("Somehow all camera names in 'modality' are different.")
-            log_warn("multi_cam support not available")
-            log_warn("Something is probably wrong with this clip.")
-            return -1
+            cam_cnt = index_pair[1] - index_pair[0]
+            log_warn(f"Using {cam_cnt} as camera count")
+            return cam_cnt
         
         # log_info(f'Initial search finds {cam_cnt} cams')
         
@@ -432,16 +432,10 @@ class BackendServer:
             for i in range(index_pair[0] + offset, index_pair[1], cam_cnt):
                 # log_info(f'checking {i}')
                 if self.data_list[i][self.data_entry_cam] != verify_cam_name:
-                    log_warn(f'Between {index_pair[0]} and {index_pair[1]}')
-                    log_warn(f'mismatch at {i} with name of {self.data_list[i][self.data_entry_cam]}')
-                    log_warn(f'expect {verify_cam_name}')
-                    cam_cnt = -1
-                    break
-                
-        if cam_cnt == -1:
-            log_warn("data does not pass check with modality. Camera names are not consistant.")
-            log_warn("multi_cam support not available")
-            return -1 
+                    log_warn(f'Between {index_pair[0]} and {index_pair[1]-1}')
+                    log_warn(f'mismatch at {i} with name of {self.data_list[i][self.data_entry_cam]}, expect {verify_cam_name}')
+                    log_warn(f'Fallback to 1')
+                    cam_cnt = 1
         
         # log_ok(f'{cam_cnt} found and verified')
         return cam_cnt
@@ -643,9 +637,9 @@ class BackendServer:
         safe_sendall(conn,b'\xff\x05\x00')
         safe_sendall(conn,struct.pack('>I', len(self.clip_cnt)))
         for clip in self.data_clip_list:
-            safe_sendall(conn,struct.pack('>I', clip.begin))
-            safe_sendall(conn,struct.pack('>I', clip.end))
-            safe_sendall(conn,struct.pack('>I', clip.cam))
+            safe_sendall(conn,struct.pack('>I', clip['begin']))
+            safe_sendall(conn,struct.pack('>I', clip['end']))
+            safe_sendall(conn,struct.pack('>I', clip['cam']))
     
     def send_partial_csv(self,conn):
         # build partial CSV
