@@ -356,7 +356,7 @@ class BackendServer:
         old_clip_id = self.get_clip_id(0)
         old_clip_index = 0
         
-        log_info(f'start checking id starting with {old_clip_id} at 0')
+        # log_info(f'start checking id starting with {old_clip_id} at 0')
         
         for i in range(0,self.data_cnt):
             # log_info(f'id of {i} is {self.get_clip_id(i)}')
@@ -364,8 +364,10 @@ class BackendServer:
                 clip_index_pair_list.append((old_clip_index,i))
                 old_clip_index = i
                 old_clip_id = self.get_clip_id(i)
-                log_info(f'clip boundary detected at {i}')
-                log_info(f'New clip id: {old_clip_id}')
+                # log_info(f'clip boundary detected at {i}')
+                # log_info(f'New clip id: {old_clip_id}')
+                
+        log_info(f'{len(clip_index_pair_list)} clips detected.')
         
         self.get_modality_entry()
         if self.data_entry_cam == -1:
@@ -395,7 +397,7 @@ class BackendServer:
         # get cam index
         if self.data_entry_cam == -1:
             return -1
-        log_info(f'Search between {index_pair[0]} {index_pair[1]}')
+        # log_info(f'Search between {index_pair[0]} {index_pair[1]}')
         
         # modality found
         cam_cnt = -1
@@ -409,11 +411,13 @@ class BackendServer:
                 cam_dic[cam_name] = None
 
         if cam_cnt == -1:
+            log_warn(f'Between {index_pair[0]} and {index_pair[1]}')
             log_warn("Somehow all camera names in 'modality' are different.")
             log_warn("multi_cam support not available")
+            log_warn("Something is probably wrong with this clip.")
             return -1
         
-        log_info(f'Initial search finds {cam_cnt} cams')
+        # log_info(f'Initial search finds {cam_cnt} cams')
         
         # check if everything is correct with modality
         for offset in range(0,cam_cnt):
@@ -422,7 +426,9 @@ class BackendServer:
             for i in range(index_pair[0] + offset, index_pair[1], cam_cnt):
                 # log_info(f'checking {i}')
                 if self.data_list[i][self.data_entry_cam] != verify_cam_name:
-                    log_info(f'mismatch at {i} with name of {self.data_list[i][self.data_entry_cam]}')
+                    log_warn(f'Between {index_pair[0]} and {index_pair[1]}')
+                    log_warn(f'mismatch at {i} with name of {self.data_list[i][self.data_entry_cam]}')
+                    log_warn(f'expect {verify_cam_name}')
                     cam_cnt = -1
                     break
                 
