@@ -559,7 +559,7 @@ class BackendServer:
             safe_sendall(conn,b'\xff\x04\x01')  
     
     def handle_clip_req(self,conn):
-        data = self.safe_recv(conn,4)
+        # data = self.safe_recv(conn,4)
         # index = struct.unpack('>I', data)[0]
         log_network(f'Received request for clip')
         self.send_clip(conn)
