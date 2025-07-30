@@ -60,6 +60,9 @@ class FrontendClient:
         self.img_cache = []
         self.img_error_msg = []
         self.labeling_status = []
+        
+        self.combined_entry_list_cnt = None
+        self.combined_clip_list_cnt = None
 
         # initialization (this is temporarily)
         self.load_setting_file(setting_path)
@@ -74,7 +77,7 @@ class FrontendClient:
         
         # Lock until at least self.tag_cnt is available
         time.sleep(0.5)
-        while (self.tag_cnt == None or self.data_cnt == None):
+        while (self.tag_cnt == None or self.data_cnt == None or self.combined_clip_list_cnt == None):
             log_warn('Resend request for self.tag_cnt and self.data_cnt to be loaded.')
             self.request_csv_tag_info()
             self.request_csv_data()
@@ -86,7 +89,7 @@ class FrontendClient:
         self.create_ui()
 
         # init first image
-        self.img_index = 0
+        # self.img_index = 0
         self.init_frame()
 
         # update ui
@@ -194,46 +197,51 @@ class FrontendClient:
 
         # self.scale_var = tk.IntVar()
 
-        self.slider = tk.Scale(self.status_bar, from_=1, to=self.data_cnt, orient=tk.HORIZONTAL, command=self.on_slider_move)
+        self.slider = tk.Scale(self.status_bar, from_=1, to=self.combined_entry_list_cnt, orient=tk.HORIZONTAL, command=self.on_slider_move)
         self.slider.pack(fill=tk.X, expand=True)
         
-        # image display (80% space)
-        self.img_frame = ttk.Frame(self.main_frame)
-        self.img_frame.pack()
+        self.widget_frame = ttk.Frame(self.main_frame)
+        self.widget_frame.pack()
         
         # create list for all cameras
-        self.camera_frame_list = []
+        self.widget_list = []
         
-        self.img_canvas = tk.Canvas(self.img_frame, width=796, height=448, bg="gray")
-        self.img_canvas.pack()
+        self.combined_index=0
         
-        self.labeling_button_list = []
-        for i in range (0,self.tag_cnt):
-            button = ttk.Button(
-                self.img_frame, 
-                text=f'[{i+1}] {self.alias_list[i]}', 
-                command=lambda idx=i: self.handle_selection(idx)
-                )
-            self.labeling_button_list.append(button)
-            self.labeling_button_list[i].pack(side=tk.LEFT, padx=5)
-            self.root.bind(str(i+1), self.keyboard_event)
-        # false button
-        self.false_button = ttk.Button(
-            self.img_frame, 
-            text='[F] False', 
-            command=lambda idx=-1: self.handle_selection(idx)
-            )
-        self.false_button.pack(side=tk.LEFT, padx=5)
-        self.root.bind('F', self.keyboard_event)
-        self.root.bind('f', self.keyboard_event)
+        # image display (80% space)
+        # self.img_frame = ttk.Frame(self.main_frame)
+        # self.img_frame.pack(side="left", padx=5, pady=5)
+        
+        # self.img_canvas = tk.Canvas(self.img_frame, width=796, height=448, bg="gray")
+        # self.img_canvas.pack()
+        
+        # self.labeling_button_list = []
+        # for i in range (0,self.tag_cnt):
+        #     button = ttk.Button(
+        #         self.img_frame, 
+        #         text=f'[{i+1}] {self.alias_list[i]}', 
+        #         command=lambda idx=i: self.handle_selection(idx)
+        #         )
+        #     self.labeling_button_list.append(button)
+        #     self.labeling_button_list[i].pack(side=tk.LEFT, padx=5)
+        #     self.root.bind(str(i+1), self.keyboard_event)
+        # # false button
+        # self.false_button = ttk.Button(
+        #     self.img_frame, 
+        #     text='[F] False', 
+        #     command=lambda idx=-1: self.handle_selection(idx)
+        #     )
+        # self.false_button.pack(side=tk.LEFT, padx=5)
+        # self.root.bind('F', self.keyboard_event)
+        # self.root.bind('f', self.keyboard_event)
 
         self.control_frame = ttk.Frame(self.root, padding=10)
         self.control_frame.pack(fill=tk.X)
 
-        self.prev_btn = ttk.Button(self.control_frame, text="Previous Frame", command=self.prev_image)
+        self.prev_btn = ttk.Button(self.control_frame, text="Previous Frame", command=self.prev_img_group)
         self.prev_btn.pack(side=tk.LEFT, padx=5)
         
-        self.next_btn = ttk.Button(self.control_frame, text="Next Frame", command=self.next_image)
+        self.next_btn = ttk.Button(self.control_frame, text="Next Frame", command=self.next_img_group)
         self.next_btn.pack(side=tk.LEFT, padx=5)
 
         self.next_btn = ttk.Button(self.control_frame, text="Load All Image", command=self.request_all_image)
@@ -329,129 +337,154 @@ class FrontendClient:
         if self.is_connected():
             log_ok("Reconnection successful")
     
+    def get_combined_index_list(self):
+        return self.combined_entry_list[self.combined_index]
+    
     def keyboard_event(self,event):
         if event.keysym == 'Left':
-            self.prev_image()
+            self.prev_img_group()
         elif event.keysym == 'Right':
-            self.next_image()
+            self.next_img_group()
         elif event.keysym == 's' or event.keysym == 'S':
             self.request_save()
-        elif event.keysym == 'f' or event.keysym == 'F':
-            self.handle_selection(-1)
-            self.next_image()
         else:
             key_num = int(event.keysym)
             if key_num>0 and key_num<=self.tag_cnt and key_num<=9:
                 self.handle_selection(key_num-1)
                 if self.multiple_selection == False:
-                    self.next_image()
+                    self.next_img_group()
+                    
+    def keyboard_event_false(self,event):
+        if event.keysym == 'f' or event.keysym == 'F':
+            self.handle_selection(-1)
+            self.next_img_group()
+            
+    def handle_selection_false(self,group_index):
+        if group_index == -1:
+            for img_index in self.get_combined_index_list():
+                for i in range(0,self.tag_cnt):
+                    self.data_list[img_index][i] = False
+            return
+        else:
+            for i in range(0,self.tag_cnt):
+                self.data_list[self.get_combined_index_list()[group_index]][i] = False
+            return
     
-    def handle_selection(self,tag_index):
+    def handle_selection(self,key_num):
+        tag_index = key_num % self.tag_cnt
+        img_index = self.get_combined_index_list()[int(key_num / self.tag_cnt)]
         # write to own csv
         # local data_list write
-        log_info(f'selecting tag {tag_index}')
+        log_info(f'selecting tag {tag_index}, alias{self.alias_list[tag_index]}')
         # false tag
-        if tag_index == -1:
-            for i in range(0,self.tag_cnt):
-                self.data_list[self.img_index][i] = False
+        
         # single selection
-        elif self.multiple_selection==False:
-            self.data_list[self.img_index][tag_index] = True
+        if self.multiple_selection==False:
+            self.data_list[img_index][tag_index] = True
             for i in range(0,self.tag_cnt):
                 if i!=tag_index:
-                    self.data_list[self.img_index][i] = False
+                    self.data_list[img_index][i] = False
         # multiple selection
         else:
-            self.data_list[self.img_index][tag_index] = not self.data_list[self.img_index][tag_index]
-        self.request_csv_change(self.img_index,self.img_index,self.data_list[self.img_index])
+            self.data_list[img_index][tag_index] = not self.data_list[img_index][tag_index]
+        self.request_csv_change(img_index,img_index,self.data_list[img_index])
         self.update_ui()
 
-    def prev_image(self):
-        if self.img_index > 0:
-            self.goto_frame(self.img_index-1)
+    def prev_img_group(self):
+        if self.combined_index > 0:
+            self.goto_img_group(self.combined_index-1)
 
-    def next_image(self):
-        if self.img_index < self.data_cnt - 1:
-            self.goto_frame(self.img_index+1)
+    def next_img_group(self):
+        if self.combined_index < self.combined_entry_list_cnt - 1:
+            self.goto_img_group(self.combined_index+1)
 
     def on_slider_move(self,value):
-        self.goto_frame(int(value)-1)
+        self.goto_img_group(int(value)-1)
 
     # wrapper for goto frame, update both image and ui
-    def goto_frame(self,index):
-        if index<self.data_cnt and index>=0:
-            self.img_index = index
+    def goto_img_group(self,index):
+        if index<self.combined_entry_list_cnt and index>=0:
+            self.combined_index = index
             self.init_frame()
             self.update_ui()
         else:
             return
+    
+    def get_cam_cnt(self):
+        return len(self.get_combined_index_list())
+    
+    def init_frame(self):
+        if self.get_cam_cnt()!=len(self.widget_list):
+            for widget in self.widget_list:
+                widget.destroy_all()
+                self.widget_list = []
+            
+            for i in range(0,self.get_cam_cnt()):
+                self.widget_list.append(DisplayWidget(self.widget_frame,i,self))
+                
+        for widget in self.widget_list:
+            widget.display_img()
 
     # update things on the screen
-    def init_frame(self):
-        log_info(f"Printing frame with index {self.img_index}")
-        self.img_canvas.delete("all")
-        # image out of bound
-        if self.img_index < 0 or self.img_index >= self.data_cnt:
-            self.img_canvas.create_text(
-            398, 224,  # Center position
-            text=f"Image {self.img_index} out of bound!\nContact developer.",
-            fill="white", font=("Arial", 24),
-            anchor="center", justify="center"
-            )
-        # image not in cache
-        elif self.img_cache[self.img_index] == None:
-            # no error, still waiting
-            if self.img_error_msg[self.img_index] == None:
-                log_info(f"Image {self.img_index} not found in cache, sending web request")
-                self.request_image(self.img_index)
+    # def init_frame(self):
+    #     log_info(f"Printing frame with index {self.img_index}")
+    #     self.img_canvas.delete("all")
+    #     # image out of bound
+    #     if self.img_index < 0 or self.img_index >= self.data_cnt:
+    #         self.img_canvas.create_text(
+    #         398, 224,  # Center position
+    #         text=f"Image {self.img_index} out of bound!\nContact developer.",
+    #         fill="white", font=("Arial", 24),
+    #         anchor="center", justify="center"
+    #         )
+    #     # image not in cache
+    #     elif self.img_cache[self.img_index] == None:
+    #         # no error, still waiting
+    #         if self.img_error_msg[self.img_index] == None:
+    #             log_info(f"Image {self.img_index} not found in cache, sending web request")
+    #             self.request_image(self.img_index)
 
-                self.img_canvas.create_text(
-                398, 224,  # Center position
-                text=f"Image {self.img_index+1} requested\nWaiting for server response.",
-                fill="white", font=("Arial", 12),
-                anchor="center", justify="center"
-                )
-            # error, print error msg
-            else:
+    #             self.img_canvas.create_text(
+    #             398, 224,  # Center position
+    #             text=f"Image {self.img_index+1} requested\nWaiting for server response.",
+    #             fill="white", font=("Arial", 12),
+    #             anchor="center", justify="center"
+    #             )
+    #         # error, print error msg
+    #         else:
 
-                error_msg = self.img_error_msg[self.img_index]
+    #             error_msg = self.img_error_msg[self.img_index]
                 
-                self.img_canvas.create_text(
-                398, 224,  # Center position
-                text=f"Remote server responded with the following error:\n{error_msg}",
-                fill="white", font=("Arial", 12),
-                width=600, anchor="center", justify="center"
-                )
-        # image in cache, process and print image with PIL
-        else:
-            log_info(f"Image {self.img_index} found in cache, printing...")
-            img_data = self.img_cache[self.img_index]
-            image = Image.open(io.BytesIO(img_data))
-            image.thumbnail((796, 448))  # adjust size
-            photo = ImageTk.PhotoImage(image)
-                
-            self.img_canvas.photo = photo
-            self.img_canvas.delete("all")
+    #             self.img_canvas.create_text(
+    #             398, 224,  # Center position
+    #             text=f"Remote server responded with the following error:\n{error_msg}",
+    #             fill="white", font=("Arial", 12),
+    #             width=600, anchor="center", justify="center"
+    #             )
+    #     # image in cache, process and print image with PIL
+    #     else:
+    #         log_info(f"Image {self.img_index} found in cache, printing...")
+    #         # img_data = self.img_cache[self.img_index]
+    #         # image = Image.open(io.BytesIO(img_data))
+    #         # image.thumbnail((796, 448))  # adjust size
+    #         # photo = ImageTk.PhotoImage(image)
             
+    #         photo = self.img_cache[self.img_index]
+                
+    #         self.img_canvas.image = photo
+    #         self.img_canvas.delete("all")
+    #         self.img_canvas.create_image(0, 0, anchor="nw", image=photo)
     
     def update_ui(self):
-        # buttons
-        for i in range(0,self.tag_cnt):
-            if self.data_list[self.img_index][i]:
-                self.labeling_button_list[i].config(style='Blue.TButton')
-            else:
-                self.labeling_button_list[i].config(style='White.TButton')
-        if True in self.data_list[self.img_index]:
-            self.false_button.config(style='White.TButton')
-        else:
-            self.false_button.config(style='Blue.TButton')
-
-        self.status_label.config(text=f'{self.img_index+1}/{self.data_cnt}')
+        for widget in self.widget_list:
+            widget.update_ui()
+        
+        # label
+        self.status_label.config(text=f'{self.combined_index+1}/{self.combined_entry_list_cnt}')
 
         # slider
-        self.slider.set(self.img_index+1)
-
-        log_ok('UI status updated')
+        self.slider.set(self.combined_index+1)
+        pass
     
     def request_image(self, index):
         log_network(f'Request image {index}')
@@ -581,11 +614,11 @@ class FrontendClient:
             messagebox.showwarning("Connection error", 
                         f"Socket timeout, connection may be lost")
             self.connected = False
-        except Exception as e:
-            log_error(f"Unexpected error in receive_data: {str(e)}")
-            messagebox.showwarning("Connection error", 
-                        f"Unexpected error in receive_data: {str(e)}")
-            self.connected = False
+        # except Exception as e:
+        #     log_error(f"Unexpected error in receive_data: {str(e)}")
+        #     messagebox.showwarning("Connection error", 
+        #                 f"Unexpected error in receive_data: {str(e)}")
+        #     self.connected = False
         finally:
             if self.sock:
                 try:
@@ -624,8 +657,9 @@ class FrontendClient:
             log_warn(f"Error received: {error_msg}")
             self.img_error_msg[index] = error_msg
 
-            if self.img_index == index:
+            if index in self.combined_entry_list[self.combined_index]:
                 self.init_frame()
+            
     def receive_csv_tag(self):
         data = self.safe_recv(5)
         status, self.tag_cnt = struct.unpack('>BI',data)
@@ -695,14 +729,18 @@ class FrontendClient:
 
     def handle_image(self, index, img_data):
         if not img_data:
-            self.image_label.config(image=None)
-            self.tag_var.set("")
+            log_warn("empty image data")
             return
         
-        self.img_cache[index] = img_data
+        image = Image.open(io.BytesIO(img_data))
+        image.thumbnail((796, 448))  # adjust size
+        photo = ImageTk.PhotoImage(image)
+        
+        self.img_cache[index] = photo
 
-        if index == self.img_index:
-            self.init_frame()
+        for i in range(0,len(self.combined_entry_list)):
+            if index == self.combined_entry_list[i]:
+                self.init_frame(i)
     
     def handle_csv_tag(self,alias_list):
         self.alias_list = alias_list
@@ -735,6 +773,9 @@ class FrontendClient:
         self.combined_entry_list = []
         self.combined_clip_list = []
         
+        self.combined_entry_list_cnt = None
+        self.combined_clip_list_cnt = None
+        
         for clip in self.clip_list:
             combined_clip_begin_index = len(self.combined_entry_list)
             
@@ -749,14 +790,136 @@ class FrontendClient:
             for i in range(clip['begin'],clip['end'],clip['cam']):
                 combined_clip = (combined_clip_begin_index,combined_clip_end_index)
                 self.combined_clip_list.append(combined_clip)
+        
+        self.combined_entry_list_cnt = len(self.combined_entry_list)
+        self.combined_clip_list_cnt = len(self.combined_clip_list)
             
     def start_client(self):
         log_info('Starting GUI')
         self.root.mainloop()
     
 class DisplayWidget():
-    def __init__():
-        pass
+    def __init__(self,widget_frame,group_index,outer):
+        self.outer = outer
+        self.group_index = group_index
+        # image display (80% space)
+        self.img_frame = ttk.Frame(widget_frame)
+        self.img_frame.pack(side="left", padx=5, pady=5)
+        
+        self.img_canvas = tk.Canvas(self.img_frame, width=796, height=448, bg="gray")
+        self.img_canvas.pack()
+        
+        self.labeling_button_list = []
+        for i in range (0,self.outer.tag_cnt):
+            button = ttk.Button(
+                self.img_frame, 
+                text=f'[{i+1+self.group_index*self.outer.tag_cnt}] {self.outer.alias_list[i]}', 
+                command=lambda idx=i+self.group_index*self.outer.tag_cnt: self.outer.handle_selection(idx)
+                )
+            self.labeling_button_list.append(button)
+            self.labeling_button_list[i].pack(side=tk.LEFT, padx=5)
+            self.outer.root.bind(str(i+1+self.group_index*self.outer.tag_cnt), self.outer.keyboard_event)
+        # false button
+        self.false_button = ttk.Button(
+            self.img_frame, 
+            text='[F] False', 
+            command=lambda idx=group_index: self.outer.handle_selection_false(idx)
+            )
+        self.false_button.pack(side=tk.LEFT, padx=5)
+        self.outer.root.bind('F', self.outer.keyboard_event_false)
+        self.outer.root.bind('f', self.outer.keyboard_event_false)
+        
+    def display_img(self):
+        log_info(f'get_combined_index_list: {self.outer.get_combined_index_list()}')
+        log_info(f'self.group_index: {self.group_index}')
+        
+        img_index = self.outer.get_combined_index_list()[self.group_index]
+        
+        log_info(f"Printing frame with index {img_index}")
+        self.img_canvas.delete("all")
+        # image out of bound
+        if img_index < 0 or img_index >= self.outer.data_cnt:
+            self.img_canvas.create_text(
+            398, 224,  # Center position
+            text=f"Image {img_index} out of bound!\nContact developer.",
+            fill="white", font=("Arial", 24),
+            anchor="center", justify="center"
+            )
+        # image not in cache
+        elif self.outer.img_cache[img_index] == None:
+            # no error, still waiting
+            if self.outer.img_error_msg[img_index] == None:
+                log_info(f"Image {img_index} not found in cache, sending web request")
+                self.outer.request_image(img_index)
+
+                self.img_canvas.create_text(
+                398, 224,  # Center position
+                text=f"Image {img_index+1} requested\nWaiting for server response.",
+                fill="white", font=("Arial", 12),
+                anchor="center", justify="center"
+                )
+            # error, print error msg
+            else:
+
+                error_msg = self.outer.img_error_msg[img_index]
+                
+                self.img_canvas.create_text(
+                398, 224,  # Center position
+                text=f"Remote server responded with the following error:\n{error_msg}",
+                fill="white", font=("Arial", 12),
+                width=600, anchor="center", justify="center"
+                )
+        # image in cache, process and print image with PIL
+        else:
+            log_info(f"Image {img_index} found in cache, printing...")
+            # img_data = self.img_cache[img_index]
+            # image = Image.open(io.BytesIO(img_data))
+            # image.thumbnail((796, 448))  # adjust size
+            # photo = ImageTk.PhotoImage(image)
+            
+            photo = self.outer.img_cache[img_index]
+                
+            self.img_canvas.image = photo
+            self.img_canvas.delete("all")
+            self.img_canvas.create_image(0, 0, anchor="nw", image=photo)
+    
+    def destroy_all(self):
+        # 解绑所有键盘事件
+        for i in range(0, self.outer.tag_cnt):
+            self.outer.root.unbind(str(i+1+self.group_index*self.outer.tag_cnt))
+        self.outer.root.unbind('F')
+        self.outer.root.unbind('f')
+
+        for button in self.labeling_button_list:
+            button.destroy()
+        self.false_button.destroy()
+        
+        # 销毁画布和框架
+        self.img_canvas.destroy()
+        self.img_frame.destroy()
+        
+        # 清空引用列表
+        self.labeling_button_list = []
+    
+    def update_ui(self):
+        img_index = self.outer.get_combined_index_list()[self.group_index]
+        # buttons
+        for i in range(0,self.outer.tag_cnt):
+            if self.outer.data_list[img_index][i]:
+                self.labeling_button_list[i].config(style='Blue.TButton')
+            else:
+                self.labeling_button_list[i].config(style='White.TButton')
+        if True in self.outer.data_list[img_index]:
+            self.false_button.config(style='White.TButton')
+        else:
+            self.false_button.config(style='Blue.TButton')
+
+        # self.status_label.config(text=f'{self.img_index+1}/{self.data_cnt}')
+
+        # # slider
+        # self.slider.set(self.img_index+1)
+
+        log_ok('UI status updated')
     
 
 if __name__ == "__main__":
