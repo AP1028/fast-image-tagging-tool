@@ -310,14 +310,14 @@ class FrontendClient:
             if key_num>0 and key_num<=9:
                 log_info(f"call: {key_num}")
                 self.handle_selection(key_num)
-                if self.multiple_selection == False:
-                    # self.next_img_group()
+                if self.multiple_selection == False and self.get_cam_cnt()<=1:
+                    self.next_img_group()
                     pass
                     
     def keyboard_event_false(self,event):
         if event.keysym == 'f' or event.keysym == 'F':
             self.handle_selection_false(-1)
-            # self.next_img_group()
+            self.next_img_group()
             
     def handle_selection_false(self,group_index):
         if group_index == -1:
