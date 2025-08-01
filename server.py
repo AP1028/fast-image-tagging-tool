@@ -436,6 +436,7 @@ class BackendServer:
                     log_warn(f'mismatch at {i} with name of {self.data_list[i][self.data_entry_cam]}, expect {verify_cam_name}')
                     log_warn(f'Fallback to 1')
                     cam_cnt = 1
+                    break
         
         # log_ok(f'{cam_cnt} found and verified')
         return cam_cnt
