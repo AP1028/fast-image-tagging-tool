@@ -136,7 +136,7 @@ class BackendServer:
         try:
             save_to_same_file_str = str(setting_data["save_to_same_file"])
             save_to_same_file_str = save_to_same_file_str.strip().lower()
-            if save_to_same_file_str == 'true' or '1': 
+            if save_to_same_file_str == 'true' or save_to_same_file_str == '1': 
                 self.save_to_same_file = True
             else:
                 self.save_to_same_file = False
