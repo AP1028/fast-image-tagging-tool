@@ -425,6 +425,7 @@ class BackendServer:
         
         # log_info(f'Initial search finds {cam_cnt} cams')
         
+        check_flag = True
         # check if everything is correct with modality
         for offset in range(0,cam_cnt):
             verify_cam_name = self.data_list[index_pair[0] + offset][self.data_entry_cam]
@@ -436,7 +437,9 @@ class BackendServer:
                     log_warn(f'mismatch at {i} with name of {self.data_list[i][self.data_entry_cam]}, expect {verify_cam_name}')
                     log_warn(f'Fallback to 1')
                     cam_cnt = 1
+                    check_flag = False
                     break
+            if check_flag==False: break
         
         # log_ok(f'{cam_cnt} found and verified')
         return cam_cnt
