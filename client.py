@@ -660,10 +660,11 @@ class FrontendClient:
             return
         
         image = Image.open(io.BytesIO(img_data))
-        image.thumbnail((796, 448))  # adjust size
-        photo = ImageTk.PhotoImage(image)
         
-        self.img_cache[index] = photo
+        # image.thumbnail((796, 448))  # adjust size
+        # photo = ImageTk.PhotoImage(image)
+        
+        self.img_cache[index] = image
 
         for i in range(0,len(self.get_combined_index_list())):
             if index == self.get_combined_index_list()[i]:
@@ -867,7 +868,10 @@ class DisplayWidget():
         else:
             log_info(f"Image {img_index} found in cache, printing...")
             
-            photo = self.outer.img_cache[img_index]
+            image = self.outer.img_cache[img_index]
+            
+            image.thumbnail((796, 448))  # adjust size
+            photo = ImageTk.PhotoImage(image)
                 
             self.img_canvas.image = photo
             self.img_canvas.delete("all")
