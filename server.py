@@ -245,7 +245,7 @@ class BackendServer:
         self.meta_entry_code = -1
         cnt = 0
         for entry in self.meta_column_list:
-            if entry.strip() == 'code':
+            if entry.strip() == 'code' or entry.strip() == 'tag_code':
                 self.meta_entry_code = cnt
                 log_info(f"Meta CSV has column at {self.meta_entry_code} matching 'code'")
                 break
