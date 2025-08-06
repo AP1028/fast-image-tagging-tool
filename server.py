@@ -242,6 +242,7 @@ class BackendServer:
     
     def get_meta_entry_code(self):
         # get meta code entry
+        self.meta_entry_code = -1
         cnt = 0
         for entry in self.meta_column_list:
             if entry.strip() == 'code':
@@ -249,6 +250,9 @@ class BackendServer:
                 log_info(f"Meta CSV has column at {self.meta_entry_code} matching 'code'")
                 break
             cnt+=1
+        
+        if self.meta_entry_code == -1:
+            log_error(f"Meta CSV does not have entry matching 'code'")
     
     def get_meta_entry_alias(self):
         # get meta alias entry
