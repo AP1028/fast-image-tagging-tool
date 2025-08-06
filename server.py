@@ -301,6 +301,7 @@ class BackendServer:
             # alternate method
             log_info("No column matching 'tag_code_' found. Checking data_column_list for entry matching 'tag_code'")
             cnt = 0
+            self.data_non_tag_entry_list = []
             for entry in self.data_column_list:
                 if entry.strip() == 'tag_code':
                     self.data_tag_code_list.append(self.data_list[0][cnt])
