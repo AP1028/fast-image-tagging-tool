@@ -258,7 +258,7 @@ class BackendServer:
         # get meta alias entry
         cnt = 0
         for entry in self.meta_column_list:
-            if entry.strip() == 'alias' or 'scenario':
+            if entry.strip() == 'alias' or entry.strip() =='scenario':
                 self.meta_entry_alias = cnt
                 log_info(f"Meta CSV has column at {self.meta_entry_alias} matching 'alias'")
                 break
