@@ -654,6 +654,10 @@ class BackendServer:
         partial_csv = self.data_csv.copy(deep=True)
         for entry in self.data_non_tag_entry_list:
             partial_csv.drop(entry, inplace=True, axis=1)
+            
+        log_info('Partial CSV as following')
+        log_info(partial_csv)    
+        
         partial_csv_str = partial_csv.to_csv(index=False)
 
         # encode CSV ready to send
