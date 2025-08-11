@@ -146,11 +146,18 @@ class FrontendClient:
         except KeyError:
             log_warn("Missing multiple_selection in setting, using false as default")
             self.multiple_selection = False
+        # try:
+        #     self.always_save = setting_data["always_save"]
+        # except KeyError:
+        #     log_warn("Missing multiple_selection in setting, using false as default")
+        #     self.always_save = False
+        # auto save
         try:
-            self.always_save = setting_data["always_save"]
+            self.autosave = setting_data["autosave"]
+            if self.autosave == 0: self.autosave = 1
         except KeyError:
-            log_warn("Missing multiple_selection in setting, using false as default")
-            self.always_save = False
+            log_warn("Missing autosave in setting, using 1 as default")
+            self.autosave = 1
         
 
     def create_ui(self):
@@ -450,7 +457,7 @@ class FrontendClient:
                     log_info(f'Sending False for tag {i} {self.alias_list[i]}')
                     self.safe_sendall(b'\x00')
             # autosave when writing
-            if(self.always_save):
+            if(index1%self.autosave == 0 or index1 == self.data_cnt):
                 self.request_save()
         except RuntimeError as e:
             messagebox.showwarning("Connection error", 
