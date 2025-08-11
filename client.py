@@ -324,14 +324,14 @@ class FrontendClient:
             for img_index in self.get_combined_index_list():
                 for i in range(0,self.tag_cnt):
                     self.data_list[img_index][i] = False
-                    self.request_csv_change(img_index,img_index,self.data_list[img_index])
+                self.request_csv_change(img_index,img_index,self.data_list[img_index])
         else:
             img_index = self.get_combined_index_list()[group_index]
             for i in range(0,self.tag_cnt):
                 self.data_list[img_index][i] = False
             self.request_csv_change(img_index,img_index,self.data_list[img_index])
                 
-        self.request_csv_change(img_index,img_index,self.data_list[img_index])
+        # self.request_csv_change(img_index,img_index,self.data_list[img_index])
         self.update_ui()
     
     def handle_selection(self,key_num):
