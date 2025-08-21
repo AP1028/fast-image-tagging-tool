@@ -237,7 +237,10 @@ class BackendServer:
         # get alias list with the tag code, by searching metadata
         self.get_tag_alias_list()
         
-        # get camera cnt
+        # ADD THIS LINE: Reorder CSV to alternating pattern BEFORE analyzing clips
+        self.reorder_csv_to_alternating_pattern()
+        
+        # get camera cnt - this will now work with the reordered data
         self.get_data_clip_list()
     
     def get_meta_entry_code(self):
@@ -670,6 +673,102 @@ class BackendServer:
         safe_sendall(conn,b'\xff\x06\x00')
         safe_sendall(conn,struct.pack('>I', self.partial_csv_bytes_length))
         safe_sendall(conn,self.partial_csv_bytes)
+    
+    def reorder_csv_to_alternating_pattern(self):
+        """
+        Reorder CSV data from grouped pattern (cam1,cam1,cam1,cam2,cam2,cam2) 
+        to alternating pattern (cam1,cam2,cam3,cam1,cam2,cam3)
+        """
+        # Need to get modality entry first
+        self.get_modality_entry()
+        
+        if self.data_entry_cam == -1:
+            log_info("No modality column found, skipping reordering")
+            return
+        
+        log_info("Checking if CSV needs reordering from grouped to alternating pattern")
+        
+        # First, we need to identify clips without relying on self.data_clip_list
+        # Get clip boundaries by finding where clip_id changes
+        self.get_clip_id_entry()
+        if self.data_entry_clip == -1:
+            log_warn("No clip_id found, cannot reorder by clips")
+            return
+        
+        # Find clip boundaries
+        clip_boundaries = []
+        old_clip_id = self.get_clip_id(0)
+        old_clip_index = 0
+
+        for i in range(0, self.data_cnt):
+            if self.get_clip_id(i) != old_clip_id or i >= self.data_cnt-1:
+                clip_boundaries.append((old_clip_index, i))
+                old_clip_index = i
+                old_clip_id = self.get_clip_id(i)
+        
+        reordered_data_list = []
+        reordering_happened = False
+        
+        for clip_start, clip_end in clip_boundaries:
+            clip_data = self.data_list[clip_start:clip_end]
+            
+            # Group frames by camera for this clip
+            unique_cams = []
+            cam_groups = {}
+            
+            for i, row in enumerate(clip_data):
+                cam_name = row[self.data_entry_cam]
+                if cam_name not in cam_groups:
+                    cam_groups[cam_name] = []
+                    unique_cams.append(cam_name)
+                cam_groups[cam_name].append(row)
+            
+            # Check if it's grouped pattern and needs reordering
+            if len(unique_cams) > 1:
+                # Check if all cameras have the same number of frames
+                frames_per_cam_counts = [len(cam_groups[cam]) for cam in unique_cams]
+                if len(set(frames_per_cam_counts)) == 1:  # All cameras have same frame count
+                    frames_per_cam = frames_per_cam_counts[0]
+                    
+                    # Check if current order is grouped (consecutive frames per camera)
+                    is_grouped = True
+                    for cam_idx, cam_name in enumerate(unique_cams):
+                        start_idx = cam_idx * frames_per_cam
+                        end_idx = start_idx + frames_per_cam
+                        for i in range(start_idx, min(end_idx, len(clip_data))):
+                            if i < len(clip_data) and clip_data[i][self.data_entry_cam] != cam_name:
+                                is_grouped = False
+                                break
+                        if not is_grouped:
+                            break
+                    
+                    if is_grouped:
+                        log_info(f"Clip from {clip_start} to {clip_end} is in grouped pattern, reordering to alternating")
+                        reordering_happened = True
+                        
+                        # Reorder to alternating pattern
+                        for frame_idx in range(frames_per_cam):
+                            for cam_name in unique_cams:
+                                if frame_idx < len(cam_groups[cam_name]):
+                                    reordered_data_list.append(cam_groups[cam_name][frame_idx])
+                    else:
+                        # Already in alternating or other pattern, keep as is
+                        reordered_data_list.extend(clip_data)
+                else:
+                    # Uneven frame counts, keep as is
+                    reordered_data_list.extend(clip_data)
+            else:
+                # Single camera or no cameras, keep as is
+                reordered_data_list.extend(clip_data)
+    
+        # Update the data if reordering happened
+        if reordering_happened:
+            log_ok("CSV data reordered from grouped to alternating pattern")
+            self.data_list = reordered_data_list
+            # Update the CSV dataframe as well
+            self.data_csv = pd.DataFrame(self.data_list, columns=self.data_column_list)
+        else:
+            log_info("No reordering needed")
 
     def __init__(self, setting_path='server_setting.json'):
         self.load_setting_file(setting_path)
