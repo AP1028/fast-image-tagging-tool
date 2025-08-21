@@ -208,8 +208,32 @@ class FrontendClient:
         self.slider = tk.Scale(self.status_bar, from_=1, to=self.combined_entry_list_cnt, orient=tk.HORIZONTAL, command=self.on_slider_move)
         self.slider.pack(fill=tk.X, expand=True)
         
-        self.widget_frame = ttk.Frame(self.main_frame)
-        self.widget_frame.pack()
+        # === MODIFIED SECTION STARTS HERE ===
+        # Create scrollable frame for widgets
+        self.scroll_canvas = tk.Canvas(self.main_frame, bg="white")
+        self.scroll_canvas.pack(fill=tk.BOTH, expand=True, pady=(0, 5))
+        
+        # Add vertical scrollbar
+        self.v_scrollbar = ttk.Scrollbar(self.main_frame, orient=tk.VERTICAL, command=self.scroll_canvas.yview)
+        self.v_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        # Configure canvas scrolling
+        self.scroll_canvas.configure(yscrollcommand=self.v_scrollbar.set)
+        
+        # Create frame inside canvas for widgets
+        self.widget_frame = ttk.Frame(self.scroll_canvas)
+        self.canvas_window = self.scroll_canvas.create_window((0, 0), window=self.widget_frame, anchor="nw")
+        
+        # Bind events for scrolling and resizing
+        self.widget_frame.bind("<Configure>", self._on_frame_configure)
+        self.scroll_canvas.bind("<Configure>", self._on_canvas_configure)
+        self.scroll_canvas.bind_all("<MouseWheel>", self._on_mousewheel)
+        
+        # Make canvas focusable for keyboard events
+        self.scroll_canvas.focus_set()
+        self.scroll_canvas.bind("<Up>", self._on_scroll_up)
+        self.scroll_canvas.bind("<Down>", self._on_scroll_down)
+        # === MODIFIED SECTION ENDS HERE ===
         
         # create list for all cameras
         self.widget_list = []
@@ -237,7 +261,40 @@ class FrontendClient:
         self.root.bind('s', self.keyboard_event)
         self.root.bind('S', self.keyboard_event)
 
+        # ADD THIS LINE:
+        self.root.bind("<Button-1>", self._on_canvas_click)
+
         log_ok('GUI building successful')
+    
+    # Add these new methods to the FrontendClient class:
+
+    def _on_frame_configure(self, event):
+        """Reset the scroll region to encompass the inner frame"""
+        self.scroll_canvas.configure(scrollregion=self.scroll_canvas.bbox("all"))
+
+    def _on_canvas_configure(self, event):
+        """Configure the inner frame size when canvas size changes"""
+        # Update the inner frame width to match canvas width
+        canvas_width = event.width
+        self.scroll_canvas.itemconfig(self.canvas_window, width=canvas_width)
+
+    def _on_mousewheel(self, event):
+        """Handle mouse wheel scrolling"""
+        self.scroll_canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+
+    def _on_scroll_up(self, event):
+        """Handle up arrow key scrolling"""
+        self.scroll_canvas.yview_scroll(-1, "units")
+        return "break"  # Prevent default behavior
+
+    def _on_scroll_down(self, event):
+        """Handle down arrow key scrolling"""
+        self.scroll_canvas.yview_scroll(1, "units")
+        return "break"  # Prevent default behavior
+    
+    def _on_canvas_click(self, event):
+        """Set focus to canvas when clicked for keyboard scrolling"""
+        self.scroll_canvas.focus_set()
     
     def connect_to_server(self,host,port):
         log_network(f'Connecting of {host}:{port}')
@@ -407,6 +464,11 @@ class FrontendClient:
         self.widget_list = []
         for i in self.widget_order:
             self.widget_list.append(DisplayWidget(self.widget_frame,i,self))
+        
+        # === ADD THIS LINE ===
+        # Trigger frame reconfigure to update scroll region
+        self.widget_frame.update_idletasks()
+        self._on_frame_configure(None)
         
     
     def update_ui(self):
@@ -765,14 +827,26 @@ class DisplayWidget():
             if group_index == outer.widget_order[i]:
                 self.order_index = i
                 break
-        
 
         self.outer = outer
         
-        # UI stuff
-        # image display (80% space)
+        # === MODIFIED SECTION STARTS HERE ===
+        # Calculate grid position for wrapping layout
+        try:
+            window_width = self.outer.scroll_canvas.winfo_width()
+            if window_width <= 1:  # Canvas not yet rendered
+                window_width = 1000  # Use default window width
+        except:
+            window_width = 1000  # Fallback
+        
+        widgets_per_row = max(1, window_width // 820)  # 820 = widget width + padding
+        row = self.order_index // widgets_per_row
+        col = self.order_index % widgets_per_row
+        
+        # UI stuff - image display frame
         self.img_frame = ttk.Frame(widget_frame)
-        self.img_frame.pack(side="left", padx=5, pady=5)
+        self.img_frame.grid(row=row, column=col, padx=5, pady=5, sticky="nw")
+        # === MODIFIED SECTION ENDS HERE ===
         
         self.img_canvas = tk.Canvas(self.img_frame, width=796, height=448, bg="gray")
         self.img_canvas.pack()
@@ -820,16 +894,13 @@ class DisplayWidget():
             command=lambda idx1=self.order_index, idx2=1: self.outer.change_widget_order(idx1,idx2)
             )
         self.order_right.pack(side=tk.LEFT, padx=5)
-        
-        
-        
         self.init = False
         
     def display_img(self):
         if self.is_deleted == True or self.init == True: return
         
         if self.img_canvas.winfo_exists == False: 
-            log_error(f'Unexpected error. self.is_deleted: {self.is_deleted}, self.init: {self.init} self.group_index: {self.group_index}, img_index: {img_index}')
+            log_error(f'Unexpected error. self.is_deleted: {self.is_deleted}, self.init: {self.init} self.group_index: {self.group_index}')  # Remove img_index reference
             sys.exit(1)
 
         # log_info(f'get_combined_index_list: {self.outer.get_combined_index_list()}')
@@ -884,11 +955,6 @@ class DisplayWidget():
             self.img_canvas.delete("all")
             self.img_canvas.create_image(0, 0, anchor="nw", image=photo)
             
-        self.in_print = False
-        log_info(f'unlock print {self.group_index}')
-    
-    
-    
     def update_ui(self):
         if self.is_deleted == True or self.init == True: return
 
