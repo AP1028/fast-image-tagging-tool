@@ -239,6 +239,7 @@ class BackendServer:
         
         # ADD THIS LINE: Reorder CSV to alternating pattern BEFORE analyzing clips
         self.reorder_csv_to_alternating_pattern()
+        log_info(f"data_list with size of {len(self.data_list)} after reordering")
         
         # get camera cnt - this will now work with the reordered data
         self.get_data_clip_list()
