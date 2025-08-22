@@ -820,9 +820,12 @@ class DisplayWidget():
         self.group_index = group_index
         log_info(f'Init {self.group_index}')
         self.init = True
-        # self.in_print = False
-        # self.in_update = False
         self.is_deleted = False
+        
+        # Initialize with default dimensions - will be updated when image loads
+        self.canvas_width = 796
+        self.canvas_height = 448
+        
         for i in range(0,len(outer.widget_order)):
             if group_index == outer.widget_order[i]:
                 self.order_index = i
@@ -830,27 +833,28 @@ class DisplayWidget():
 
         self.outer = outer
         
-        # === MODIFIED SECTION STARTS HERE ===
         # Calculate grid position for wrapping layout
         try:
             window_width = self.outer.scroll_canvas.winfo_width()
-            if window_width <= 1:  # Canvas not yet rendered
-                window_width = 1000  # Use default window width
+            if window_width <= 1:
+                window_width = 1000
         except:
-            window_width = 1000  # Fallback
+            window_width = 1000
         
-        widgets_per_row = max(1, window_width // 820)  # 820 = widget width + padding
+        # Use current canvas width for initial layout calculation
+        widgets_per_row = max(1, window_width // (self.canvas_width + 24))  # 24 = padding
         row = self.order_index // widgets_per_row
         col = self.order_index % widgets_per_row
         
         # UI stuff - image display frame
         self.img_frame = ttk.Frame(widget_frame)
         self.img_frame.grid(row=row, column=col, padx=5, pady=5, sticky="nw")
-        # === MODIFIED SECTION ENDS HERE ===
         
-        self.img_canvas = tk.Canvas(self.img_frame, width=796, height=448, bg="gray")
+        # Create canvas with initial size - will be reconfigured when image loads
+        self.img_canvas = tk.Canvas(self.img_frame, width=self.canvas_width, height=self.canvas_height, bg="gray")
         self.img_canvas.pack()
         
+        # Rest of initialization code remains the same...
         self.label_frame = ttk.Frame(self.img_frame)
         self.label_frame.pack(side=tk.TOP, padx=5, pady=5)
         
@@ -897,24 +901,27 @@ class DisplayWidget():
         self.init = False
         
     def display_img(self):
-        if self.is_deleted == True or self.init == True: return
+        if self.is_deleted == True or self.init == True: 
+            return
         
         if self.img_canvas.winfo_exists == False: 
-            log_error(f'Unexpected error. self.is_deleted: {self.is_deleted}, self.init: {self.init} self.group_index: {self.group_index}')  # Remove img_index reference
+            log_error(f'Unexpected error. self.is_deleted: {self.is_deleted}, self.init: {self.init} self.group_index: {self.group_index}')
             sys.exit(1)
 
-        # log_info(f'get_combined_index_list: {self.outer.get_combined_index_list()}')
-        # log_info(f'self.group_index: {self.group_index}')
-        if self.group_index>=len(self.outer.get_combined_index_list()): log_error("Out of bound!")
+        if self.group_index>=len(self.outer.get_combined_index_list()): 
+            log_error("Out of bound!")
 
         img_index = self.outer.get_combined_index_list()[self.group_index]
         
         log_info(f"Printing frame with index {img_index}")
         self.img_canvas.delete("all")
+        
         # image out of bound
         if img_index < 0 or img_index >= self.outer.data_cnt:
+            center_x = self.canvas_width // 2
+            center_y = self.canvas_height // 2
             self.img_canvas.create_text(
-            398, 224,  # Center position
+            center_x, center_y,  # Dynamic center position
             text=f"Image {img_index} out of bound!\nContact developer.",
             fill="white", font=("Arial", 24),
             anchor="center", justify="center"
@@ -925,22 +932,25 @@ class DisplayWidget():
             if self.outer.img_error_msg[img_index] == None:
                 log_info(f"Image {img_index} not found in cache, sending web request")
                 self.outer.request_image(img_index)
+                center_x = self.canvas_width // 2
+                center_y = self.canvas_height // 2
                 self.img_canvas.create_text(
-                398, 224,  # Center position
+                center_x, center_y,  # Dynamic center position
                 text=f"Image {img_index+1} requested\nWaiting for server response.",
                 fill="white", font=("Arial", 12),
                 anchor="center", justify="center"
                 )
             # error, print error msg
             else:
-
                 error_msg = self.outer.img_error_msg[img_index]
+                center_x = self.canvas_width // 2
+                center_y = self.canvas_height // 2
                 
                 self.img_canvas.create_text(
-                398, 224,  # Center position
+                center_x, center_y,  # Dynamic center position
                 text=f"Remote server responded with the following error:\n{error_msg}",
                 fill="white", font=("Arial", 12),
-                width=600, anchor="center", justify="center"
+                width=min(600, self.canvas_width-20), anchor="center", justify="center"
                 )
         # image in cache, process and print image with PIL
         else:
@@ -948,7 +958,10 @@ class DisplayWidget():
             
             image = self.outer.img_cache[img_index]
             
-            image.thumbnail((796, 448))  # adjust size
+            # Resize canvas to match image dimensions
+            self._resize_canvas_for_image(image)
+            
+            # Use original image size - no thumbnail scaling
             photo = ImageTk.PhotoImage(image)
                 
             self.img_canvas.image = photo
@@ -972,6 +985,22 @@ class DisplayWidget():
             self.false_button.config(style='Blue.TButton')
 
         log_ok('UI status updated')
+    
+    def _resize_canvas_for_image(self, image):
+        """Resize canvas to match image dimensions"""
+        img_width, img_height = image.size
+        
+        # Only resize if dimensions have changed
+        if self.canvas_width != img_width or self.canvas_height != img_height:
+            self.canvas_width = img_width
+            self.canvas_height = img_height
+            
+            # Reconfigure canvas size
+            self.img_canvas.config(width=self.canvas_width, height=self.canvas_height)
+            
+            # Update the scroll region since widget size changed
+            self.outer.widget_frame.update_idletasks()
+            self.outer._on_frame_configure(None)
         
     def destroy_all(self):
         self.is_deleted = True
