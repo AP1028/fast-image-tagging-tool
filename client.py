@@ -86,6 +86,7 @@ class FrontendClient:
         
         log_ok(f'successfully loaded self.tag_cnt={self.tag_cnt} and self.data_cnt={self.data_cnt}')
         
+        self.global_scale = 1.0  # Default scale factor
         # start UI
         self.create_ui()
 
@@ -256,6 +257,16 @@ class FrontendClient:
         self.next_btn = ttk.Button(self.control_frame, text="[S] Save", command=self.request_save)
         self.next_btn.pack(side=tk.LEFT, padx=5)
 
+        # ADD these scale buttons:
+        self.scale_down_btn = ttk.Button(self.control_frame, text="Scale -", command=self.scale_down)
+        self.scale_down_btn.pack(side=tk.LEFT, padx=(20, 5))
+        
+        self.scale_label = ttk.Label(self.control_frame, text=f"{int(self.global_scale * 100)}%")
+        self.scale_label.pack(side=tk.LEFT, padx=5)
+        
+        self.scale_up_btn = ttk.Button(self.control_frame, text="Scale +", command=self.scale_up)
+        self.scale_up_btn.pack(side=tk.LEFT, padx=5)
+
         self.root.bind('<Left>', self.keyboard_event)
         self.root.bind('<Right>', self.keyboard_event)
         self.root.bind('s', self.keyboard_event)
@@ -266,6 +277,26 @@ class FrontendClient:
 
         log_ok('GUI building successful')
     
+    # ADD these new methods to FrontendClient class:
+    def scale_up(self):
+        """Increase global scale factor"""
+        if self.global_scale < 3.0:  # Maximum scale limit
+            self.global_scale += 0.25
+            self._update_scale()
+
+    def scale_down(self):
+        """Decrease global scale factor"""
+        if self.global_scale > 0.25:  # Minimum scale limit
+            self.global_scale -= 0.25
+            self._update_scale()
+
+    def _update_scale(self):
+        """Update scale label and refresh images"""
+        log_info(f"Setting global scale to {self.global_scale}")
+        self.scale_label.config(text=f"{int(self.global_scale * 100)}%")
+        # Refresh all displayed images
+        self.init_frame()
+
     # Add these new methods to the FrontendClient class:
 
     def _on_frame_configure(self, event):
@@ -958,11 +989,17 @@ class DisplayWidget():
             
             image = self.outer.img_cache[img_index]
             
-            # Resize canvas to match image dimensions
+            # Resize canvas to match scaled image dimensions
             self._resize_canvas_for_image(image)
             
-            # Use original image size - no thumbnail scaling
-            photo = ImageTk.PhotoImage(image)
+            # Apply global scaling to the image
+            if self.outer.global_scale != 1.0:
+                scaled_width = int(image.size[0] * self.outer.global_scale)
+                scaled_height = int(image.size[1] * self.outer.global_scale)
+                scaled_image = image.resize((scaled_width, scaled_height), Image.Resampling.LANCZOS)
+                photo = ImageTk.PhotoImage(scaled_image)
+            else:
+                photo = ImageTk.PhotoImage(image)
                 
             self.img_canvas.image = photo
             self.img_canvas.delete("all")
@@ -987,13 +1024,17 @@ class DisplayWidget():
         log_ok('UI status updated')
     
     def _resize_canvas_for_image(self, image):
-        """Resize canvas to match image dimensions"""
+        """Resize canvas to match scaled image dimensions"""
         img_width, img_height = image.size
         
+        # Apply global scale factor
+        scaled_width = int(img_width * self.outer.global_scale)
+        scaled_height = int(img_height * self.outer.global_scale)
+        
         # Only resize if dimensions have changed
-        if self.canvas_width != img_width or self.canvas_height != img_height:
-            self.canvas_width = img_width
-            self.canvas_height = img_height
+        if self.canvas_width != scaled_width or self.canvas_height != scaled_height:
+            self.canvas_width = scaled_width
+            self.canvas_height = scaled_height
             
             # Reconfigure canvas size
             self.img_canvas.config(width=self.canvas_width, height=self.canvas_height)
