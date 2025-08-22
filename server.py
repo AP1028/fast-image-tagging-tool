@@ -696,22 +696,44 @@ class BackendServer:
             log_warn("No clip_id found, cannot reorder by clips")
             return
         
-        # Find clip boundaries
+        # Find clip boundaries - THIS IS WHERE THE BUG WAS
         clip_boundaries = []
         old_clip_id = self.get_clip_id(0)
         old_clip_index = 0
 
         for i in range(0, self.data_cnt):
-            if self.get_clip_id(i) != old_clip_id or i >= self.data_cnt-1:
+            current_clip_id = self.get_clip_id(i)
+            
+            # FIXED: Handle both clip change AND final iteration properly
+            if current_clip_id != old_clip_id:
+                # End of previous clip
                 clip_boundaries.append((old_clip_index, i))
                 old_clip_index = i
-                old_clip_id = self.get_clip_id(i)
+                old_clip_id = current_clip_id
+            
+            # CRITICAL FIX: Handle the very last clip
+            if i == self.data_cnt - 1:
+                # This is the last row, close the final clip
+                clip_boundaries.append((old_clip_index, i + 1))  # +1 because slice end is exclusive
+        
+        # DEBUG: Validate clip boundaries cover all data
+        total_rows_in_clips = sum(end - start for start, end in clip_boundaries)
+        if total_rows_in_clips != self.data_cnt:
+            log_error(f"CLIP BOUNDARY BUG: Clips cover {total_rows_in_clips} rows, but data has {self.data_cnt}")
+            log_error(f"Clip boundaries: {clip_boundaries}")
+            return  # Don't proceed with corrupted boundaries
+        
+        log_info(f"Found {len(clip_boundaries)} clips covering all {self.data_cnt} rows")
         
         reordered_data_list = []
         reordering_happened = False
         
-        for clip_start, clip_end in clip_boundaries:
-            clip_data = self.data_list[clip_start:clip_end]
+        for clip_idx, (clip_start, clip_end) in enumerate(clip_boundaries):
+            # ADDITIONAL SAFETY: Ensure we don't exceed data bounds
+            actual_clip_end = min(clip_end, self.data_cnt)
+            clip_data = self.data_list[clip_start:actual_clip_end]
+            
+            log_info(f"Processing clip {clip_idx}: rows {clip_start} to {actual_clip_end-1} ({len(clip_data)} rows)")
             
             # Group frames by camera for this clip
             unique_cams = []
@@ -744,14 +766,20 @@ class BackendServer:
                             break
                     
                     if is_grouped:
-                        log_info(f"Clip from {clip_start} to {clip_end} is in grouped pattern, reordering to alternating")
+                        log_info(f"Clip from {clip_start} to {actual_clip_end} is in grouped pattern, reordering to alternating")
                         reordering_happened = True
                         
                         # Reorder to alternating pattern
+                        rows_added = 0
                         for frame_idx in range(frames_per_cam):
                             for cam_name in unique_cams:
                                 if frame_idx < len(cam_groups[cam_name]):
                                     reordered_data_list.append(cam_groups[cam_name][frame_idx])
+                                    rows_added += 1
+                        
+                        # SAFETY CHECK: Make sure we added all rows from this clip
+                        if rows_added != len(clip_data):
+                            log_error(f"REORDERING ERROR: Added {rows_added} rows but clip had {len(clip_data)}")
                     else:
                         # Already in alternating or other pattern, keep as is
                         reordered_data_list.extend(clip_data)
@@ -761,10 +789,17 @@ class BackendServer:
             else:
                 # Single camera or no cameras, keep as is
                 reordered_data_list.extend(clip_data)
-    
+
+        # FINAL VALIDATION: Check row count preservation
+        if len(reordered_data_list) != self.data_cnt:
+            log_error(f"REORDERING FAILED: Started with {self.data_cnt} rows, ended with {len(reordered_data_list)}")
+            log_error("Keeping original data to prevent crashes")
+            return  # Don't apply corrupted reordering
+        
         # Update the data if reordering happened
         if reordering_happened:
             log_ok("CSV data reordered from grouped to alternating pattern")
+            log_info(f"Row count preserved: {self.data_cnt} -> {len(reordered_data_list)}")
             self.data_list = reordered_data_list
             # Update the CSV dataframe as well
             self.data_csv = pd.DataFrame(self.data_list, columns=self.data_column_list)
