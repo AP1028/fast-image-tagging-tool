@@ -325,6 +325,8 @@ class BackendServer:
             
         # get total tag cnt
         self.tag_cnt = len(self.data_tag_entry_list)
+        if self.tag_cnt == 0:
+            self.tag_cnt = len(self.data_tag_code_list)
     
     def get_tag_alias_list(self):
         # search matching tag code in 'code' entry in tag csv list 

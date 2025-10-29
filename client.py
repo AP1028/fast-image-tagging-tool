@@ -697,7 +697,7 @@ class FrontendClient:
             alias_bytes =  self.safe_recv(alias_size)
             alias = alias_bytes.decode('utf-8')
             alias_list.append(alias)
-        log_network("Receive csv tag")
+        log_network(f"Received {self.tag_cnt} csv tag with alias_list of {alias_list}")
         self.handle_csv_tag(alias_list)
     def receive_csv_change_msg(self):
         data = self.safe_recv(1)
