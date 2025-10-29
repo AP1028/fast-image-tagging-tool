@@ -307,7 +307,7 @@ class BackendServer:
             cnt = 0
             self.data_non_tag_entry_list = []
             for entry in self.data_column_list:
-                if entry.strip() == 'tag_code':
+                if entry.strip() == 'tag_code' or entry.strip() == 'tag_codes':
                     self.data_tag_code_list.append(self.data_list[0][cnt])
                 if entry.strip() == 'label':
                     self.data_tag_entry_list.append(cnt)
