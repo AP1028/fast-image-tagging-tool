@@ -43,7 +43,101 @@ To run the client:
 conda activate python312 # If you are using conda for virtual environment
 python client.py
 ```
+## Setting
 
+Both the server and client will need a config file to run.
+
+### Server Setting
+server_setting.json:
+```json
+{
+    "host": "0.0.0.0",
+    "port": 52973,
+    "csv_dir": "data/your_data.csv",
+    "csv_save_dir": "data",
+    "meta_path": "meta.csv",
+    "save_to_same_file": false
+}
+```
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `host` | string | No | `"0.0.0.0"` | IP address for server to bind to. Use `"0.0.0.0"` for all interfaces or `"127.0.0.1"` for localhost only |
+| `port` | integer | No | `52973` | Port number for socket communication |
+| `csv_dir` | string | **Yes** | - | Path to your input CSV file containing the dataset |
+| `csv_save_dir` | string | No* | - | Directory where labeled CSV will be saved (*required if `save_to_same_file` is false) |
+| `meta_path` | string | **Yes** | - | Path to metadata CSV file containing tag definitions |
+| `save_to_same_file` | boolean | No | `false` | If `true`, overwrites the original CSV. If `false`, saves to `csv_save_dir` with `__labelled__` suffix |
+---
+
+**Note:** When `save_to_same_file` is `false`, the output file will be named: `{original_filename}__labelled__.csv`
+
+### Client Setting
+client_setting.json:
+```json
+{
+    "host": "127.0.0.1",
+    "port": 52973,
+    "multiple_selection": false,
+    "autosave": 10
+}
+```
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `host` | string | No | `"127.0.0.1"` | IP address of the server to connect to |
+| `port` | integer | No | `52973` | Port number for socket communication (must match server) |
+| `multiple_selection` | boolean | No | `false` | If `true`, allows multiple tags per image. If `false`, selecting a tag deselects others |
+| `autosave` | integer | No | `1` | Auto-saves every N entries. Set to `1` to save on every change, higher values save less frequently |
+
+---
+
+**Note:** When `multiple_selection` is `false`, hitting the keyboard hotkey for labels (0, 1, 2, etc) will automatically jump to the next frame. hitting the keyboard hotkey for 'False' (F key) will jump to the next frame regardless of this option.
+
+## CSV Format Requirements
+
+Your data CSV must contain the following:
+
+Required Columns:
+
+1. `clip_id` - Groups images into clips/sequences
+
+2. `file_path` (required) - Full or relative path to image files
+
+3. Tag columns (at least one required) - Either format:
+
+    + Format A: `tag_code_XXXX` where `XXXX` is the numeric tag code (e.g., `tag_code_100`, `tag_code_200`)
+    + Format B: Combination of `tag_code` + `label` columns
+
+Optional Columns:
+
+1. `modality` (optional) - Camera/sensor name for multi-camera support
+
+Example:
+```csv
+clip_id,modality,file_path,tag_code_100,tag_code_200,tag_code_300
+1,camera_front,images/img_001.jpg,True,False,False,
+1,camera_rear,images/img_002.jpg,False,True,False,
+2,camera_front,images/img_003.jpg,False,False,True
+```
+
+## Metadata CSV Format
+
+The metadata file defines your tag labels and must contain:
+
+Required Columns
+
+1. `code` or `tag_code` - Numeric tag identifier matching your data CSV
+2. `alias` or `scenario` - Human-readable tag name displayed in UI
+
+Example:
+```csv
+code,alias
+100,Clear Weather
+200,Rainy
+300,Foggy
+400,Night Time
+500,Heavy Traffic
+```
 ## To Do List:
 
 ### Backend:
